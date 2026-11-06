@@ -462,12 +462,13 @@ ipcMain.handle('ai:update', async (_e, payload) => {
   if (!project || !project.id) return { ok: false, message: '项目数据无效，请刷新后重试。' };
   const prompt = [
     '你是一个严谨的项目工作记忆助手。根据用户新输入，更新项目结构化记录。只返回 JSON，不要 Markdown。',
-    'JSON 格式：{"summary":"一句话当前概况","completed":["..."],"inProgress":["..."],"blockers":["..."],"nextSteps":["..."],"todos":[{"title":"...","due":"YYYY-MM-DD HH:mm 或今天/明天 18:00 之类，没有就留空","priority":"高/普通/低","done":false}],"decisions":["新的关键决策"],"conflicts":["新旧信息冲突点"]}',
+    'JSON 格式：{"summary":"一句话当前概况","todos":[{"title":"...","due":"YYYY-MM-DD HH:mm 或今天/明天 18:00 之类，没有就留空","priority":"高/普通/低","done":false,"blocked":"当前阻塞点，没有就空字符串","related":"关联信息（链接/文件/人/事项），没有就空字符串","next":"下一步动作，没有就空字符串"}],"decisions":["新的关键决策"],"conflicts":["新旧信息冲突点"]}',
     '规则：',
-    '1. 保留旧记录中仍有效的内容；completed 与 decisions 只能追加，绝不删除或改写旧条目。',
-    '2. inProgress、blockers、nextSteps 反映当前真实状态：已解决的问题从 blockers 移除并在 completed 中以一句话记录。',
+    '1. todos 返回全量清单：保留旧待办（含 blocked/related/next 原值），仅按新输入更新确有变化的条目；decisions 只能追加，绝不删除或改写旧条目。',
+    '2. blocked/related/next 是每条待办的属性，反映其真实状态：阻塞解决后把该条 blocked 置为空字符串；完成可 done=true。',
     '3. 新信息与旧信息冲突时不要擅自覆盖，把冲突写进 conflicts，由用户确认。',
     '4. 从输入中提取带时间的承诺写入 todos；没有把握的日期一律留空，不要编造。',
+    '5. 不要输出 completed / inProgress / blockers / nextSteps 字段（旧格式已废弃）。',
     `当前项目：${project.name}（目标：${project.goal || '未填写'}）`,
     `旧记录：${JSON.stringify(project.state || {})}`,
     `最近历史：${JSON.stringify((project.logs || []).slice(-8).map(l => ({ at: l.at, message: l.message })))}`,

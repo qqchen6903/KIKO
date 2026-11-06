@@ -43,8 +43,13 @@ function projectToMd(p) {
     { lineWidth: 0, noRefs: true, sortKeys: false },
   );
   const st = p.state || {};
-  const sec = (title, items) => `## ${title}\n\n${(items || []).map(x => `- ${x}`).join('\n') || '（无）'}\n`;
-  const todoLine = t => `- [${t.done ? 'x' : ' '}] ${t.title}${t.due ? `（到期 ${t.due}` : ''}${t.priority && t.priority !== '普通' ? `，${t.priority}优先级` : ''}${t.due ? '）' : ''}`;
+  /* 待办39：待办行下挂 阻塞点/关联/下一步 属性子行；旧四状态小节（sec 助手随之删除）不再渲染 */
+  const ATTR = { blocked: '阻塞点', related: '关联', next: '下一步' };
+  const todoLine = t => {
+    const main = `- [${t.done ? 'x' : ' '}] ${t.title}${t.due ? `（到期 ${t.due}` : ''}${t.priority && t.priority !== '普通' ? `，${t.priority}优先级` : ''}${t.due ? '）' : ''}`;
+    const attrs = Object.entries(ATTR).map(([k, label]) => t[k] ? `\n  - ${label}：${t[k]}` : '').join('');
+    return main + attrs;
+  };
   const decLine = d => `- ${d.at ? `[${d.at}] ` : ''}${d.text}`;
   const logBlock = l => l.system
     ? `### ${l.at}\n\n（系统）${l.message}\n`
@@ -53,12 +58,8 @@ function projectToMd(p) {
     `# ${p.name}`, '',
     st.summary ? `> ${st.summary}` : '> （尚无概况，向 KIKO 描述你的工作进展吧）', '',
     p.goal ? `**目标**：${p.goal}` : '', '',
-    sec('当前卡点', st.blockers),
-    sec('下一步', st.nextSteps),
     `## 待办\n\n${(st.todos || []).map(todoLine).join('\n') || '（无）'}\n`,
     `## 关键决策\n\n${(st.decisions || []).map(decLine).join('\n') || '（无）'}\n`,
-    sec('进行中', st.inProgress),
-    sec('已完成', st.completed),
     `## 历史时间线\n\n${(p.logs || []).map(logBlock).join('\n') || '（无）'}`,
   ].filter(line => line !== undefined).join('\n') + '\n';
   return `---\n${fm}---\n\n${body}`;

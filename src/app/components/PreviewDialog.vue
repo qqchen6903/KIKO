@@ -5,17 +5,22 @@ import { applyAiUpdate } from '../store/workspace';
 import AppIcon from './AppIcon.vue';
 
 const p = computed(() => ui.preview);
+/* 待办39：AI 预览按 新模型 diff 展示（待办三属性变化取代旧四列表差异） */
+const FIELD_LABEL = { blocked: '阻塞点', related: '关联', next: '下一步' };
 const sections = computed(() => {
   if (!p.value) return [];
   const d = p.value.diff;
+  const attrLines = (d.attrsChanged || []).map(a => {
+    const lab = FIELD_LABEL[a.field] || a.field;
+    if (a.from && !a.to) return `${a.title} · ${lab} 解除（原：${a.from}）`;
+    if (!a.from && a.to) return `${a.title} · ${lab} 新增：${a.to}`;
+    return `${a.title} · ${lab}：${a.from} → ${a.to}`;
+  });
   return [
-    { icon: 'check-circle', label: '已完成', added: d.completed.added, removed: d.completed.removed },
-    { icon: 'play-circle', label: '进行中', added: d.inProgress.added, removed: d.inProgress.removed },
-    { icon: 'alert-circle', label: '卡点', added: d.blockers.added, removed: d.blockers.removed },
-    { icon: 'arrow-right', label: '下一步', added: d.nextSteps.added, removed: d.nextSteps.removed },
-    { icon: 'flag', label: '新决策', added: d.decisionsAdded, removed: [] },
     { icon: 'list-checks', label: '新待办', added: d.todosAdded, removed: [] },
     { icon: 'check', label: '完成待办', added: d.todosDone, removed: [] },
+    { icon: 'flag', label: '新决策', added: d.decisionsAdded, removed: [] },
+    { icon: 'pencil', label: '属性更新', added: attrLines, removed: [] },
   ].filter(s => s.added.length || s.removed.length);
 });
 

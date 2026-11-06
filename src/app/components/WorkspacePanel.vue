@@ -5,13 +5,15 @@ import { ui, openModal } from '../store/ui';
 import S from '../shared-bridge';
 import AppIcon from './AppIcon.vue';
 import SummaryCard from './cards/SummaryCard.vue';
-import StatusCard from './cards/StatusCard.vue';
 import TodoCard from './cards/TodoCard.vue';
 import DecisionCard from './cards/DecisionCard.vue';
 import HistoryTimeline from './HistoryTimeline.vue';
 import WorkComposer from './WorkComposer.vue';
 
 const canUndo = computed(() => !!current.value?.logs.some(l => !l.system && !l.reverted));
+/* 待办39：横幅统计改由待办属性驱动 */
+const blockedCount = computed(() => (current.value?.state.todos || []).filter(t => !t.done && t.blocked).length);
+const nextCount = computed(() => (current.value?.state.todos || []).filter(t => !t.done && t.next).length);
 
 function editProject() {
   const p = current.value;
@@ -47,17 +49,13 @@ function editProject() {
           <span class="close" @click="ui.bannerClosed.resume = true"><AppIcon name="x" :size="11" /></span>
           <b>👋 时隔 {{ resumeInfo.days }} 天回到这个项目。</b><br />
           <template v-if="resumeInfo.message">上次记录（{{ S.fmtShort(resumeInfo.lastAt) }}）：{{ resumeInfo.message.slice(0, 80) }}<br /></template>
-          <span v-if="current.state.blockers.length" class="seg red">卡点 {{ current.state.blockers.length }} 项</span>
-          <span v-if="current.state.nextSteps.length" class="seg blue">下一步 {{ current.state.nextSteps.length }} 项</span>
-          <span v-if="!current.state.blockers.length && !current.state.nextSteps.length" class="muted">暂无卡点与下一步，可直接继续记录。</span>
+          <span v-if="blockedCount" class="seg red">阻塞 {{ blockedCount }} 项待办</span>
+          <span v-if="nextCount" class="seg blue">待推进 {{ nextCount }} 项</span>
+          <span v-if="!blockedCount && !nextCount" class="muted">暂无阻塞与待推进事项，可直接继续记录。</span>
         </div>
       </Transition>
       <div class="grid">
         <SummaryCard class="span2" />
-        <StatusCard field="completed" label="已完成" icon="check-circle" tone="green" />
-        <StatusCard field="inProgress" label="进行中" icon="play-circle" tone="blue" />
-        <StatusCard field="blockers" label="当前卡点" icon="alert-circle" tone="red" />
-        <StatusCard field="nextSteps" label="下一步" icon="arrow-right" tone="indigo" />
         <TodoCard class="span2" />
         <DecisionCard class="span2" />
       </div>

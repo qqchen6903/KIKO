@@ -13,6 +13,10 @@ const editIdx = ref(-1);
 const eTitle = ref('');
 const eDue = ref('');
 const ePriority = ref('普通');
+/* 待办39：阻塞点 / 关联 / 下一步 三属性 */
+const eBlocked = ref('');
+const eRelated = ref('');
+const eNext = ref('');
 
 function isOverdue(t) { return !t.done && t.due && Date.parse(t.due) < Date.now(); }
 async function startAdd() {
@@ -32,9 +36,15 @@ function startEdit(i) {
   eTitle.value = t.title;
   eDue.value = t.due ? new Date(t.due).toLocaleString('zh-CN', { hour12: false }) : '';
   ePriority.value = t.priority;
+  eBlocked.value = t.blocked || '';
+  eRelated.value = t.related || '';
+  eNext.value = t.next || '';
 }
 function submitEdit() {
-  if (editIdx.value >= 0) updateTodo(editIdx.value, { title: eTitle.value, dueRaw: eDue.value, priority: ePriority.value });
+  if (editIdx.value >= 0) updateTodo(editIdx.value, {
+    title: eTitle.value, dueRaw: eDue.value, priority: ePriority.value,
+    blocked: eBlocked.value, related: eRelated.value, next: eNext.value,
+  });
   editIdx.value = -1;
 }
 </script>
@@ -53,15 +63,27 @@ function submitEdit() {
             <input class="fte" v-model="eTitle" placeholder="任务" />
             <input class="fte due" v-model="eDue" placeholder="到期，如 2026-11-10 14:00 / 明天 18:00，留空不提醒" />
             <select class="fte pri" v-model="ePriority"><option v-for="p in S.PRIORITIES" :key="p">{{ p }}</option></select>
+            <input class="fte attr bl" v-model="eBlocked" placeholder="阻塞点：卡在哪里（留空清除）" />
+            <input class="fte attr rl" v-model="eRelated" placeholder="关联：链接/文件/人/事项（留空清除）" />
+            <input class="fte attr nx" v-model="eNext" placeholder="下一步：接下来要做的动作（留空清除）" />
             <button class="mini ok" @click="submitEdit" title="保存"><AppIcon name="check" :size="13" /></button>
             <button class="mini danger" @click="editIdx = -1" title="取消"><AppIcon name="x" :size="12" /></button>
           </span>
         </template>
         <template v-else>
           <input type="checkbox" class="chk" :checked="t.done" @change="toggleTodo(i)" />
-          <span class="title">{{ t.title }}</span>
-          <span class="tag" :class="{ hi: t.priority === '高', lo: t.priority === '低' }" v-if="t.priority !== '普通'">{{ t.priority }}</span>
-          <span class="due" :class="{ over: isOverdue(t) }" v-if="t.due">{{ isOverdue(t) ? '已过期 · ' : '' }}{{ S.dueLabel(t.due) }}</span>
+          <div class="tbody">
+            <div class="tline">
+              <span class="title">{{ t.title }}</span>
+              <span class="tag" :class="{ hi: t.priority === '高', lo: t.priority === '低' }" v-if="t.priority !== '普通'">{{ t.priority }}</span>
+              <span class="due" :class="{ over: isOverdue(t) }" v-if="t.due">{{ isOverdue(t) ? '已过期 · ' : '' }}{{ S.dueLabel(t.due) }}</span>
+            </div>
+            <div class="attrs" v-if="t.blocked || t.related || t.next">
+              <span class="attr bl" v-if="t.blocked" title="阻塞点"><AppIcon name="alert-circle" :size="10" />{{ t.blocked }}</span>
+              <span class="attr rl" v-if="t.related" title="关联"><AppIcon name="link" :size="10" />{{ t.related }}</span>
+              <span class="attr nx" v-if="t.next" title="下一步"><AppIcon name="arrow-right" :size="10" />{{ t.next }}</span>
+            </div>
+          </div>
           <div class="ops">
             <button class="mini" @click="startEdit(i)" title="编辑"><AppIcon name="pencil" :size="12" /></button>
             <button class="mini danger" @click="removeTodo(i)" title="删除"><AppIcon name="x" :size="12" /></button>
@@ -106,7 +128,16 @@ h3 { font-size: 13px; margin: 0; color: var(--text-2); font-weight: 600; display
   box-shadow: 0 0 0 1px rgba(255, 255, 255, .5), 0 2px 6px rgba(29, 158, 90, .35);
 }
 .chk:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0, 113, 227, .35); }
+.tbody { flex: 1; min-width: 0; }
+.tline { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .title { flex: 0 1 auto; word-break: break-word; line-height: 1.5; }
+/* 待办39：三属性徽标 */
+.attrs { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.attr { font-size: 11px; border-radius: 8px; padding: 1.5px 8px; display: inline-flex; align-items: center; gap: 5px; line-height: 1.5; word-break: break-word; align-self: flex-start; }
+.attr .ico { flex-shrink: 0; }
+.attr.bl { background: rgba(255, 214, 210, .55); color: #b02a31; }
+.attr.rl { background: rgba(228, 232, 241, .65); color: var(--text-2); }
+.attr.nx { background: rgba(214, 232, 255, .6); color: #1c5aa8; }
 .tag { font-size: 10.5px; border-radius: 980px; padding: 1px 8px; flex-shrink: 0; border: 1px solid rgba(255, 255, 255, .6); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7); }
 .tag.hi { background: rgba(255, 214, 210, .65); color: #b02a31; }
 .tag.lo { background: rgba(228, 232, 241, .7); color: var(--text-2); }
@@ -118,6 +149,9 @@ h3 { font-size: 13px; margin: 0; color: var(--text-2); font-weight: 600; display
 .fte { border: 1px solid #dcdce1; border-radius: 8px; padding: 5px 9px; font-size: 12.5px; outline: none; }
 .fte:focus { border-color: var(--accent); }
 .fte.due { flex: 1; min-width: 180px; }
+.fte.attr { flex: 1; min-width: 150px; }
+.fte.attr.bl:focus { border-color: var(--red); }
+.fte.attr.nx:focus { border-color: var(--indigo, #5e5ce6); }
 .addrow { display: flex; gap: 8px; margin-top: 10px; }
 .addrow input { border: 1px solid rgba(11, 18, 32, .12); border-radius: 10px; padding: 7px 11px; font-size: 12.5px; outline: none; background: rgba(255, 255, 255, .62); box-shadow: inset 0 1px 2px rgba(14, 38, 86, .05); }
 .addrow input:first-child { flex: 2; }

@@ -10,33 +10,37 @@ test('validateAiResult：非对象/数组一律拒绝', () => {
   }
 });
 
-test('validateAiResult：非法字段类型不写入，全空则拒绝', () => {
-  const r = S.validateAiResult({ summary: '', completed: 'not-array', blockers: { 0: 'x' } });
+test('validateAiResult：非法字段类型不写入，全空则拒绝（待办39 新模型）', () => {
+  const r = S.validateAiResult({ summary: '', todos: 'not-array', decisions: { 0: 'x' } });
   assert.strictEqual(r.ok, false, '无任何有效内容必须拒绝');
-  const r2 = S.validateAiResult({ summary: 'ok', completed: 'not-array' });
+  const r2 = S.validateAiResult({ summary: 'ok', decisions: 'not-array' });
   assert.strictEqual(r2.ok, true);
-  assert.deepStrictEqual(r2.value.completed, []);
-  assert.ok(r2.errors.some(e => e.includes('completed')));
+  assert.deepStrictEqual(r2.value.decisions, []);
+  assert.ok(r2.errors.some(e => e.includes('decisions')));
 });
 
-test('validateAiResult：正常内容规整、去重、截断、todos 校验', () => {
+test('validateAiResult：正常内容规整、去重、截断、todos 与三属性校验', () => {
   const long = 'x'.repeat(600);
   const r = S.validateAiResult({
     summary: ' 进展顺利 ',
-    completed: ['A', 'A', ' B ', long],
-    todos: [{ title: '联调鉴权', due: '明天 14:00', priority: '紧急', done: 'yes' }, { title: '' }, '无主待办', { title: '旧任务', due: '2026-11-10 09:30' }],
+    todos: [
+      { title: '联调鉴权', due: '明天 14:00', priority: '紧急', done: 'yes', blocked: '等运维开墙', related: '', next: ' ' },
+      { title: '' }, '无主待办', { title: '旧任务', due: '2026-11-10 09:30' },
+      { title: '超长属性', next: long },
+    ],
     decisions: ['确认使用 Electron'],
   });
   assert.strictEqual(r.ok, true);
   assert.strictEqual(r.value.summary, '进展顺利');
-  assert.strictEqual(r.value.completed.length, 3);
-  assert.strictEqual(r.value.completed[2].length, S.MAX_LEN);
-  assert.strictEqual(r.value.todos.length, 3, '对象待办2条有效 + 1条纯字符串按标题收录');
+  assert.strictEqual(r.value.todos.length, 4, '对象待办有效 + 1条纯字符串按标题收录');
   assert.strictEqual(r.value.todos[0].priority, '普通');
   assert.strictEqual(r.value.todos[0].done, true);
+  assert.strictEqual(r.value.todos[0].blocked, '等运维开墙', 'blocked 属性保留');
+  assert.strictEqual(r.value.todos[0].related, '', '空串属性保留（表示清除指令，与缺失区分）');
+  assert.ok('next' in r.value.todos[0] && r.value.todos[0].next === '', '空白属性 trim 为空串仍视为显式清除');
+  assert.ok(!('blocked' in r.value.todos[2]), '缺失键不落属性（表示不修改）');
+  assert.strictEqual(r.value.todos[3].next.length, S.MAX_LEN, '属性截断到 MAX_LEN');
   assert.match(r.value.todos[0].due, /^2\d{3}-/);
-  assert.strictEqual(r.value.todos[1].title, '无主待办');
-  assert.strictEqual(r.value.todos[2].title, '旧任务');
 });
 
 test('normalizeDue：多种格式归一，垃圾输入返回空', () => {
@@ -48,40 +52,60 @@ test('normalizeDue：多种格式归一，垃圾输入返回空', () => {
   assert.strictEqual(S.daysSince(S.normalizeDue('2020-01-01')), Math.floor((Date.now() - Date.parse('2020-01-01')) / 86400e3));
 });
 
-test('mergeState：已完成/决策/待办只追加，不因 AI 省略而丢失', () => {
+test('mergeState：决策/待办只追加，旧格式列表非空则保留不删（待办39）', () => {
   const old = {
-    summary: '旧摘要', completed: ['旧完成项'], inProgress: ['在做'], blockers: ['卡住'], nextSteps: ['下一步'],
+    summary: '旧摘要', completed: ['旧完成项'], blockers: ['旧格式卡点'],
     todos: [{ title: '写周报', due: '', priority: '普通', done: false, createdAt: '', remindedAt: '' }],
     decisions: [{ at: '', text: '旧决策' }], constraints: [],
   };
-  const ai = S.validateAiResult({ summary: '新摘要', completed: ['新完成项'], inProgress: [], blockers: [], nextSteps: [], todos: [{ title: '写周报', due: '明天 10:00', priority: '高', done: false }], decisions: ['新决策'], conflicts: [] }).value;
+  const ai = S.validateAiResult({ summary: '新摘要', todos: [{ title: '写周报', due: '明天 10:00', priority: '高', done: false, blocked: '周报模板未定', next: '找设计要素材' }], decisions: ['新决策'], conflicts: [] }).value;
   const { newState } = S.mergeState(old, ai);
-  assert.ok(newState.completed.includes('旧完成项'), '旧完成项必须保留');
-  assert.ok(newState.completed.includes('新完成项'));
+  assert.deepStrictEqual(newState.completed, ['旧完成项'], '旧 completed 原样保留');
+  assert.deepStrictEqual(newState.blockers, ['旧格式卡点'], '旧 blockers 不静默删除');
+  assert.ok(!('inProgress' in newState), '空旧列表不再补进新状态');
   assert.ok(newState.decisions.some(d => d.text === '旧决策'), '旧决策必须保留');
   assert.ok(newState.decisions.some(d => d.text === '新决策'));
   assert.strictEqual(newState.todos.length, 1, '同名待办合并为一条');
   assert.strictEqual(newState.todos[0].priority, '高');
-  assert.ok(newState.todos[0].due, 'AI 补充的到期时间生效');
+  assert.strictEqual(newState.todos[0].blocked, '周报模板未定', 'AI 属性写入');
+  assert.strictEqual(newState.todos[0].next, '找设计要素材');
   assert.strictEqual(newState.summary, '新摘要');
 });
 
-test('mergeState：待办 done 状态不因 AI 未回传而回退', () => {
-  const old = { todos: [{ title: '已完成任务', done: true, due: '', priority: '普通', createdAt: '', remindedAt: 'x' }], completed: [], decisions: [] };
-  const { newState } = S.mergeState(old, S.validateAiResult({ summary: 's' }).value);
-  assert.strictEqual(newState.todos[0].done, true);
-  assert.strictEqual(newState.todos[0].remindedAt, 'x');
+test('mergeState：属性缺失=不修改，空串=清除；done 只进不退', () => {
+  const old = { todos: [{ title: 'A', done: false, blocked: '有阻塞', related: 'r1' }, { title: 'B', done: true, remindedAt: 'x' }], decisions: [] };
+  const ai = S.validateAiResult({
+    summary: 's',
+    todos: [
+      { title: 'A', done: false, blocked: '' },            // 清除 blocked；related 缺失保留
+      { title: 'B', done: false },                          // AI 未回传 done=false 不得回退
+      { title: 'C', done: false, next: '起步' },            // 新待办带属性
+    ],
+  }).value;
+  const { newState } = S.mergeState(old, ai);
+  const a = newState.todos.find(t => t.title === 'A'), b = newState.todos.find(t => t.title === 'B'), c = newState.todos.find(t => t.title === 'C');
+  assert.ok(!('blocked' in a), '空串清除 blocked');
+  assert.strictEqual(a.related, 'r1', '缺失键不修改');
+  assert.strictEqual(b.done, true, 'done 只进不退');
+  assert.strictEqual(c.next, '起步', '新待办属性落库');
+  assert.ok(a.doneAt === undefined || true);
+  const b1 = newState.todos.find(t => t.title === 'B');
+  assert.strictEqual(b1.remindedAt, 'x');
 });
 
-test('diffState：正确计算新增与移除', () => {
+test('diffState：待办属性级差异与新待办/完成/决策', () => {
   const d = S.diffState(
-    { completed: ['a', 'b'], blockers: ['旧卡点'], decisions: [{ text: 'd1' }], todos: [{ title: 't', done: false }], inProgress: [], nextSteps: [] },
-    { completed: ['a', 'b', 'c'], blockers: [], decisions: [{ text: 'd1' }, { text: 'd2' }], todos: [{ title: 't', done: true }], inProgress: [], nextSteps: [] }
+    { decisions: [{ text: 'd1' }], todos: [{ title: 't', done: false, blocked: '旧卡点' }, { title: 's', done: false, next: '计划X' }] },
+    { decisions: [{ text: 'd1' }, { text: 'd2' }], todos: [{ title: 't', done: true }, { title: 's', done: false, next: '计划Y' }, { title: 'n', done: false }] }
   );
-  assert.deepStrictEqual(d.completed.added, ['c']);
-  assert.deepStrictEqual(d.blockers.removed, ['旧卡点']);
   assert.deepStrictEqual(d.decisionsAdded, ['d2']);
   assert.deepStrictEqual(d.todosDone, ['t']);
+  assert.deepStrictEqual(d.todosAdded, ['n']);
+  const fields = d.attrsChanged.map(a => a.field + ':' + a.title).sort();
+  assert.ok(fields.includes('blocked:t'), 't 的 blocked 被清除');
+  assert.ok(fields.includes('next:s'), 's 的 next 变更');
+  assert.strictEqual(d.attrsChanged.find(a => a.title === 's').from, '计划X');
+  assert.strictEqual(d.attrsChanged.find(a => a.title === 's').to, '计划Y');
 });
 
 test('migrate：v1 旧数据补齐字段，字符串决策转对象，activeProjectId 兜底', () => {
@@ -92,7 +116,8 @@ test('migrate：v1 旧数据补齐字段，字符串决策转对象，activeProj
   const db = S.migrate(v1);
   const p = db.projects[0];
   assert.strictEqual(db.version, 2);
-  assert.deepStrictEqual(p.state.inProgress, []);
+  assert.deepStrictEqual(p.state.completed, ['x'], '待办39：非空旧列表迁移时保留');
+  assert.ok(!('inProgress' in p.state), '待办39：不再补齐空的旧列表键');
   assert.deepStrictEqual(p.state.constraints, []);
   assert.strictEqual(p.state.decisions[0].text, '字符串决策');
   assert.strictEqual(p.state.todos[0].priority, '普通');

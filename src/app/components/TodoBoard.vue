@@ -20,6 +20,8 @@ const rows = computed(() => {
   return out;
 });
 const overdue = computed(() => rows.value.filter(r => r.t.due && Date.parse(r.t.due) < Date.now()));
+/* 待办39：阻塞中统计（未完成且带 blocked 属性） */
+const blockedTotal = computed(() => rows.value.filter(r => r.t.blocked).length);
 const today = computed(() => rows.value.filter(r => {
   if (!r.t.due) return false;
   const d = new Date(r.t.due), n = new Date();
@@ -60,6 +62,7 @@ function goto(pid) { selectProject(pid); }
           <span class="chip">共 {{ rows.length }} 项待办</span>
           <span class="chip red" v-if="overdue.length">{{ overdue.length }} 项已过期</span>
           <span class="chip blue" v-if="today.length">{{ today.length }} 项今天到期</span>
+          <span class="chip red" v-if="blockedTotal">{{ blockedTotal }} 项阻塞中</span>
         </div>
       </div>
     </div>
@@ -74,6 +77,8 @@ function goto(pid) { selectProject(pid); }
               <button class="pj" @click="goto(r.pid)">{{ r.pname }} ↗</button>
               <span class="tag" :class="{ hi: r.t.priority === '高', lo: r.t.priority === '低' }" v-if="r.t.priority !== '普通'">{{ r.t.priority }}</span>
               <span class="due" :class="{ over: isOver(r.t) }" v-if="r.t.due">{{ isOver(r.t) ? '已过期 · ' : '' }}{{ S.dueLabel(r.t.due) }}</span>
+              <span class="tag blocked" v-if="r.t.blocked" :title="'阻塞点：' + r.t.blocked">阻塞</span>
+              <span class="next" v-if="r.t.next" :title="'下一步：' + r.t.next">下一步：{{ r.t.next }}</span>
             </div>
           </div>
           <button class="mini danger" title="删除" @click="removeTodoIn(r.pid, r.i)"><AppIcon name="x" :size="12" /></button>
@@ -143,6 +148,8 @@ function goto(pid) { selectProject(pid); }
 .tag { font-size: 10px; border-radius: 980px; padding: 1px 8px; border: 1px solid rgba(255,255,255,.6); box-shadow: inset 0 1px 0 rgba(255,255,255,.7); }
 .tag.hi { background: rgba(255,214,210,.65); color: #b02a31; }
 .tag.lo { background: rgba(228,232,241,.7); color: var(--text-2); }
+.tag.blocked { background: rgba(255,214,210,.8); color: #b02a31; font-weight: 600; }
+.next { font-size: 11px; color: #1c5aa8; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chk { appearance: none; -webkit-appearance: none; width: 19px; height: 19px; border-radius: 50%; margin: 0; flex-shrink: 0; cursor: pointer; border: 1.5px solid rgba(11,18,32,.22); background: rgba(255,255,255,.75); box-shadow: inset 0 1px 2px rgba(14,38,86,.08); transition: all .22s var(--spring); }
 .chk:hover { border-color: rgba(29,158,90,.6); background: #fff; }
 .celebrate { text-align: center; padding: 26px 18px; }

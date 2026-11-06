@@ -40,6 +40,21 @@ test('md 往返：projectToMd → mdToProject 数据无损', () => {
   assert.deepStrictEqual(back.logs[0].snapshotBefore, { summary: '', completed: [] }, '撤销快照完整回读');
 });
 
+test('待办39：三属性 frontmatter 往返无损，正文渲染子行且旧小节消失', () => {
+  const p = sampleDb().projects[0];
+  p.state.todos.push({ title: '带属性任务', due: '', priority: '普通', done: false, createdAt: '', remindedAt: '', blocked: '等接口', related: 'https://x.io/doc', next: '先写mock' });
+  const md = store.projectToMd(p);
+  assert.ok(md.includes('  - 阻塞点：等接口'), '正文有阻塞点子行');
+  assert.ok(md.includes('  - 关联：https://x.io/doc'));
+  assert.ok(md.includes('  - 下一步：先写mock'));
+  assert.ok(!md.includes('## 当前卡点') && !md.includes('## 已完成') && !md.includes('## 进行中'), '旧四状态小节已移除');
+  const back = store.mdToProject(md);
+  const t = back.state.todos.find(x => x.title === '带属性任务');
+  assert.strictEqual(t.blocked, '等接口');
+  assert.strictEqual(t.related, 'https://x.io/doc');
+  assert.strictEqual(t.next, '先写mock');
+});
+
 test('load/saveWorkspace：写盘回读一致，改名清旧文件，删除项目清孤儿', () => {
   const root = tmpRoot();
   const db = sampleDb();

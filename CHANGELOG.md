@@ -9,6 +9,19 @@
 - 补齐 `LICENSE`（MIT，与 package.json 声明一致）；package.json `author` 改为 `qqchen2`；README 增补 git clone 说明与完整工程结构图。
 - 初始化 git 仓库（分支 `main`）并推送至 `https://github.com/qqchen6903/KIKO`。
 
+## v1.11.0（2026-11-06）
+
+### 待办数据模型重构（待办39）+ 左右独立滚动修复（待办38）
+
+- 待办38：`.body` 网格显式锁定行高 `minmax(0,1fr)`+`overflow:hidden`。此前默认 auto 行被内容撑高、滚动发生在 document 级，右侧滚动会带动左侧；修复后侧栏与主区各自内滚。新增冒烟断言。
+- **待办39 · 每条待办三属性**：待办项新增 `blocked`（阻塞点）/`related`（关联）/`next`（下一步）三个自由文本属性——
+  - 模型层 `shared.js`：`normTodos`/`validateAiResult` 落属性（AI 给出键才更新，空串=清除）；`mergeState` 属性级合并 + done 只进不退；`diffState` 输出 `attrsChanged` 属性差异；`migrate` 不再补齐旧四列表空键、非空历史数据原样保留（不静默删数据）。
+  - AI 整理提示词换为新 JSON schema（不再输出 completed/inProgress/blockers/nextSteps），规则同步改写；预览弹窗按「新待办/完成待办/新决策/属性更新」分组展示。
+  - UI：项目页四个状态卡（StatusCard）整体移除；待办行渲染红/灰/蓝属性徽标，编辑表单内联三项；总览页新增「N 项阻塞中」统计与行内「阻塞」徽标、「下一步」提示；AppIcon 新增 link 图标；「等待处理」项目状态改由带阻塞点的未完成待办驱动。
+  - 存储：md 正文待办条目下挂 `  - 阻塞点/关联/下一步：…` 子行，旧四小节删除；frontmatter 往返无损（新增单测）。
+  - 顺带修复：`validateAiResult` 在 `todos` 为非法类型时的迭代崩溃（新单测暴露的潜伏 bug）。
+- 验证：单测 **23/23**（新增/重写 5 组模型用例）、UI 冒烟 **30/30**（旧 StatusCard 流程替换为待办属性编辑→徽标渲染→状态联动→磁盘回读全链路）；`KIKO Setup 1.11.0.exe`。
+
 ## v1.10.1（2026-11-06）
 
 ### UI 打磨（待办33/34/35/37）

@@ -93,35 +93,7 @@ async function evalJs(win, code) {
   ok('新建项目出现在侧栏', !!(await evalJs(win, `return [...document.querySelectorAll('.pname')].some(x => x.textContent === ${JSON.stringify(PNAME)})`)));
   ok('空状态提示文案显示', !!(await evalJs(win, `return [...document.querySelectorAll('.empty')].length > 0`)));
 
-  // 手动添加：已完成
   const cardFinder = (label) => `[...document.querySelectorAll('.card')].find(c => c.querySelector('h3')?.textContent.includes(${label}))`;
-  const addedDone = await evalJs(win, `
-    const card = ${cardFinder("'已完成'")};
-    card.querySelector('.addbtn').click();
-    return new Promise(res => setTimeout(() => {
-      const inp = card.querySelector('.addrow input');
-      if (!inp) return res(false);
-      inp.value = '冒烟：已完成一条'; inp.dispatchEvent(new Event('input', { bubbles: true }));
-      setTimeout(() => { inp.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
-        setTimeout(() => res([...card.querySelectorAll('.txt')].some(x => x.textContent.includes('冒烟：已完成一条'))), 500); }, 100);
-    }, 200));
-  `);
-  ok('手动添加已完成条目并回显', !!addedDone);
-
-  // 添加卡点 → 状态切换
-  const addedBlock = await evalJs(win, `
-    const card = ${cardFinder("'当前卡点'")};
-    card.querySelector('.addbtn').click();
-    return new Promise(res => setTimeout(() => {
-      const inp = card.querySelector('.addrow input');
-      inp.value = '冒烟：存在一个卡点'; inp.dispatchEvent(new Event('input', { bubbles: true }));
-      setTimeout(() => { inp.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
-        setTimeout(() => res([...card.querySelectorAll('.txt')].some(x => x.textContent.includes('存在一个卡点'))), 500); }, 100);
-    }, 200));
-  `);
-  ok('添加卡点条目', !!addedBlock);
-  const statusWait = await evalJs(win, `return [...document.querySelectorAll('.pmeta span')].some(x => x.textContent.includes('等待处理'))`);
-  ok('项目状态自动切换为「等待处理」', !!statusWait);
 
   // 待办：添加 + 到期显示 + 勾选
   const todoOk = await evalJs(win, `
@@ -147,6 +119,48 @@ async function evalJs(win, code) {
   ok('待办添加并显示到期时间', !!(todoOk && todoOk.found && todoOk.dueShown), JSON.stringify(todoOk));
   ok('待办勾选变为完成态', !!(todoOk && todoOk.doneClass), JSON.stringify(todoOk));
 
+  // 待办39：再建一条未完成待办 → 编辑填三属性 → 徽标渲染 → 状态联动
+  await evalJs(win, `
+    const card = ${cardFinder("'待办事项'")};
+    const btn = card.querySelector('.addbtn');
+    if (btn) btn.click();
+    return new Promise(res => setTimeout(() => {
+      const inps = card.querySelectorAll('.addrow input');
+      if (!inps.length) return res(0);
+      inps[0].value = '冒烟：属性任务'; inps[0].dispatchEvent(new Event('input', { bubbles: true }));
+      setTimeout(() => { inps[0].dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true })); res(1); }, 150);
+    }, 250));
+  `);
+  await sleep(700);
+  const attrOk = await evalJs(win, `
+    const card = ${cardFinder("'待办事项'")};
+    const row = [...card.querySelectorAll('.trow')].find(r => r.textContent.includes('冒烟：属性任务'));
+    if (!row) return { found: false };
+    row.querySelector('.ops .mini').click();
+    return new Promise(res => setTimeout(() => {
+      const form = card.querySelector('.editform');
+      if (!form) return res({ found: true, opened: false });
+      const ins = form.querySelectorAll('.fte.attr');
+      if (ins.length !== 3) return res({ found: true, opened: true, inputs: ins.length });
+      const set = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
+      set(ins[0], '冒烟：等待接口'); set(ins[1], '冒烟：关联文档'); set(ins[2], '冒烟：先写mock');
+      setTimeout(() => {
+        form.querySelector('.mini.ok').click();
+        setTimeout(() => {
+          const r2 = [...card.querySelectorAll('.trow')].find(x => x.textContent.includes('冒烟：属性任务'));
+          if (!r2) return res({ found: true, opened: true, saved: false });
+          const bl = [...r2.querySelectorAll('.attr.bl')].map(a => a.textContent).join('');
+          const rl = [...r2.querySelectorAll('.attr.rl')].map(a => a.textContent).join('');
+          const nx = [...r2.querySelectorAll('.attr.nx')].map(a => a.textContent).join('');
+          res({ found: true, opened: true, saved: !!bl && !!rl && !!nx, bl, rl, nx });
+        }, 500);
+      }, 120);
+    }, 250));
+  `);
+  ok('待办三属性编辑并渲染徽标', !!(attrOk && attrOk.saved && attrOk.bl.includes('等待接口') && attrOk.rl.includes('关联文档') && attrOk.nx.includes('先写mock')), JSON.stringify(attrOk));
+  const statusWait = await evalJs(win, `return [...document.querySelectorAll('.pmeta span')].some(x => x.textContent.includes('等待处理'))`);
+  ok('带阻塞点的未完成待办联动项目状态为「等待处理」', !!statusWait);
+
   // 落盘校验（待办20：项目数据为 projects/*.md，用主进程同款解析回读）
   await sleep(800);
   const Storage = require('../src/storage.js');
@@ -168,9 +182,10 @@ async function evalJs(win, code) {
     ok('数据已原子写入磁盘', !!proj, 'missing direct-save=' + JSON.stringify(direct) + ' file=' + (onDisk ? 'has:' + JSON.stringify(onDisk).slice(0, 120) : 'NONE') + ' storeErr=' + await evalJs(win, `return [...document.querySelectorAll('.toast')].map(t=>t.textContent).join('|')`));
   } else ok('数据已原子写入磁盘', true);
   if (proj) {
-    ok('磁盘内容含已完成条目', proj.state.completed.some(x => x.includes('冒烟：已完成一条')));
+    const attrTask = (proj.state.todos || []).find(t => t.title.includes('冒烟：属性任务'));
+    ok('磁盘待办含三属性且值正确', !!(attrTask && attrTask.blocked === '冒烟：等待接口' && attrTask.related === '冒烟：关联文档' && attrTask.next === '冒烟：先写mock'), JSON.stringify(attrTask || null));
     ok('磁盘内容含待办且 done=true', proj.state.todos.some(t => t.title.includes('冒烟：一条待办') && t.done));
-    ok('磁盘待办到期时间为 ISO', !!(proj.state.todos[0] && /^\d{4}-\d{2}-\d{2}T/.test(proj.state.todos[0].due)));
+    ok('磁盘待办到期时间为 ISO', proj.state.todos.some(t => /^\d{4}-\d{2}-\d{2}T/.test(t.due)));
     ok('决策列表结构为对象', Array.isArray(proj.state.decisions));
   }
 

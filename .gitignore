@@ -4,3 +4,4 @@ release/
 test/.smoke-userdata/
 test/smoke-result.txt
 *.log
+sh.exe.stackdump

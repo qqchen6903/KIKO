@@ -61,7 +61,7 @@ export function createProject({ name, goal }) {
   const p = {
     id: crypto.randomUUID(), name, goal: goal || '', status: '进行中',
     createdAt: S.nowIso(), updatedAt: S.nowIso(), lastWorkedAt: S.nowIso(),
-    state: { summary: '', completed: [], inProgress: [], blockers: [], nextSteps: [], todos: [], decisions: [], constraints: [] },
+    state: { summary: '', todos: [], decisions: [], constraints: [] },
     logs: [],
   };
   store.db.projects.unshift(p);
@@ -83,32 +83,9 @@ export function deleteProject(id) {
   else persist();
 }
 
-/* ---------- 列表字段（字符串数组）手动修正 ---------- */
+/* ---------- 列表访问 ----------
+ * 待办39：旧四个状态列表的手动维护 API（addListItem 等）随 StatusCard 一并移除 */
 function st() { return current.value?.state; }
-
-export function addListItem(field, text) {
-  const s = S.sanitizeStr(text);
-  if (!s || !st()) return false;
-  if (st()[field].includes(s)) { toast('该条目已存在', 'warn'); return false; }
-  st()[field].push(s);
-  touchWorked();
-  if (field === 'blockers') deriveStatus();
-  persist();
-  return true;
-}
-export function updateListItem(field, idx, text) {
-  const s = S.sanitizeStr(text);
-  if (!s || !st() || st()[field][idx] === undefined) return;
-  st()[field][idx] = s;
-  touchWorked();
-  persist();
-}
-export function removeListItem(field, idx) {
-  if (!st()) return;
-  st()[field].splice(idx, 1);
-  if (field === 'blockers') deriveStatus();
-  persist();
-}
 
 /* ---------- 关键决策（带时间，只追加；删除仅限用户手动操作） ---------- */
 export function addDecision(text) {
@@ -141,6 +118,13 @@ export function updateTodo(idx, patch) {
   if (patch.title !== undefined) { const s = S.sanitizeStr(patch.title); if (s) t.title = s; }
   if (patch.dueRaw !== undefined) { t.due = S.normalizeDue(patch.dueRaw); t.remindedAt = ''; }
   if (patch.priority !== undefined && S.PRIORITIES.includes(patch.priority)) t.priority = patch.priority;
+  /* 待办39：三属性编辑，空串=清除 */
+  for (const k of ['blocked', 'related', 'next']) {
+    if (patch[k] === undefined) continue;
+    const s = S.sanitizeStr(patch[k]);
+    if (s) t[k] = s; else delete t[k];
+  }
+  deriveStatus();
   persist();
 }
 export function toggleTodo(idx) {
@@ -148,10 +132,12 @@ export function toggleTodo(idx) {
   if (!t) return;
   t.done = !t.done;
   t.doneAt = t.done ? S.nowIso() : '';
+  deriveStatus();
   persist();
 }
 export function removeTodo(idx) {
   st()?.todos.splice(idx, 1);
+  deriveStatus();
   persist();
 }
 
@@ -188,11 +174,14 @@ function touchWorked() {
   p.lastWorkedAt = S.nowIso();
 }
 
-/* 卡点出现/清空时联动项目状态；用户手动设置的「已完成/已暂停」不被覆盖 */
+/* 待办39：有阻塞点的未完成待办出现/清空时联动项目状态；用户手动设置的「已完成/已暂停」不被覆盖 */
+export function hasBlockedTodo(p) {
+  return (p?.state?.todos || []).some(t => !t.done && t.blocked);
+}
 function deriveStatus() {
   const p = current.value;
   if (!p) return;
-  const hasBlocker = (p.state.blockers || []).length > 0;
+  const hasBlocker = hasBlockedTodo(p);
   if (hasBlocker && p.status === '进行中') p.status = '等待处理';
   else if (!hasBlocker && p.status === '等待处理') p.status = '进行中';
 }
@@ -229,7 +218,7 @@ export async function applyAiUpdate(aiValue, message, coerceErrors = []) {
   if (p.logs.length > S.MAX_LOGS) p.logs.splice(0, p.logs.length - S.MAX_LOGS);
   p.state = merged.newState;
   touchWorked();
-  if (p.status === '进行中' || p.status === '等待处理') p.status = p.state.blockers.length ? '等待处理' : '进行中';
+  if (p.status === '进行中' || p.status === '等待处理') p.status = hasBlockedTodo(p) ? '等待处理' : '进行中';
   await persist();
 }
 

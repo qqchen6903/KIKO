@@ -56,26 +56,24 @@ function validateAiResult(raw) {
     if (a === null) { if (raw[k] !== undefined) errors.push(`字段 ${k} 格式非法，已按空列表处理。`); return []; }
     return a;
   };
-  const todosRaw = Array.isArray(raw.todos) ? raw.todos : (raw.todos !== undefined && (errors.push('字段 todos 格式非法，已忽略。'), true));
+  const todosRaw = Array.isArray(raw.todos) ? raw.todos : (raw.todos !== undefined && (errors.push('字段 todos 格式非法，已忽略。'), false));
   const todos = [];
   for (const t of todosRaw || []) {
     const title = sanitizeStr(t && typeof t === 'object' ? t.title : t);
     if (!title) continue;
     const priority = PRIORITIES.includes(t && t.priority) ? t.priority : '普通';
-    todos.push({ title: title.slice(0, MAX_LEN), due: normalizeDue(t && t.due), priority, done: !!(t && t.done) });
+    const todo = { title: title.slice(0, MAX_LEN), due: normalizeDue(t && t.due), priority, done: !!(t && t.done) };
+    /* 待办39：每条待办的三属性。键存在才赋值（可置空串表示清除），缺失=不修改 */
+    for (const k of ['blocked', 'related', 'next']) if (t && typeof t === 'object' && t[k] !== undefined) todo[k] = sanitizeStr(t[k]);
+    todos.push(todo);
   }
   const value = {
     summary: sanitizeStr(raw.summary),
-    completed: arr('completed'),
-    inProgress: arr('inProgress'),
-    blockers: arr('blockers'),
-    nextSteps: arr('nextSteps'),
     decisions: arr('decisions'),
     conflicts: arr('conflicts'),
     todos: todos.slice(0, MAX_ITEMS),
   };
-  const usable = value.summary || value.completed.length || value.inProgress.length || value.blockers.length ||
-    value.nextSteps.length || value.decisions.length || value.todos.length;
+  const usable = value.summary || value.decisions.length || value.conflicts.length || value.todos.length;
   if (!usable) return { ok: false, value: null, errors: errors.concat(['模型返回内容为空或全部无法解析，本次结果已丢弃，原数据未改动。']) };
   return { ok: true, value, errors };
 }
@@ -98,22 +96,24 @@ function normTodos(v) {
     if (!t || typeof t !== 'object') continue;
     const title = sanitizeStr(t.title);
     if (!title) continue;
-    out.push({
+    const todo = {
       title, due: normalizeDue(t.due), priority: PRIORITIES.includes(t.priority) ? t.priority : '普通',
       done: !!t.done, createdAt: sanitizeStr(t.createdAt), remindedAt: sanitizeStr(t.remindedAt), doneAt: sanitizeStr(t.doneAt),
-    });
+    };
+    for (const k of ['blocked', 'related', 'next']) { const v = sanitizeStr(t[k]); if (v) todo[k] = v; }
+    out.push(todo);
   }
   return out.slice(0, MAX_ITEMS);
 }
 
 function tkey(s) { return String(s || '').toLowerCase(); }
 
-/* 合并 AI 建议与旧状态：已完成/决策/待办“只追加”，卡点/进行中/下一步由 AI 管理生命周期，
- * 但任何旧条目都不会被静默删除——完整旧状态快照保存在本次更新的 logs.snapshotBefore 里，可撤销。 */
+/* 待办39 合并策略：决策“只追加”；待办按标题匹配，done 只进不退，
+ * blocked/related/next 三属性由 AI 管理生命周期（AI 明确给出该键才更新，空串=清除）。
+ * 旧格式四个列表（completed/inProgress/blockers/nextSteps）不再写入新内容，但原样保留不清除——
+ * 任何旧条目都不会被静默删除；完整旧状态快照也在本次更新的 logs.snapshotBefore 里，可撤销。 */
 function mergeState(oldState, ai) {
   const os = oldState || {};
-  const oldCompleted = strArray(os.completed) || [];
-  const addedCompleted = (ai.completed || []).filter(x => !oldCompleted.includes(x));
   const oldDecisions = normDecisions(os.decisions);
   const known = new Set(oldDecisions.map(d => d.text));
   for (const t of ai.decisions || []) if (!known.has(t)) oldDecisions.push({ at: nowIso(), text: t });
@@ -125,41 +125,50 @@ function mergeState(oldState, ai) {
       ex.done = ex.done || t.done;
       ex.due = t.due || ex.due;
       ex.priority = t.priority || ex.priority;
+      for (const k of ['blocked', 'related', 'next']) {
+        if (t[k] === undefined) continue;
+        const v = sanitizeStr(t[k]);
+        if (v) ex[k] = v; else delete ex[k];
+      }
+      if (ex.done) ex.doneAt = ex.doneAt || nowIso();
     } else {
-      const nt = { ...t, createdAt: nowIso() };
+      const nt = normTodos([t])[0] || { ...t };
+      nt.createdAt = nowIso();
       byTitle.set(tkey(nt.title), nt); oldTodos.push(nt);
     }
   }
   const newState = {
     summary: ai.summary || os.summary || '',
-    completed: oldCompleted.concat(addedCompleted).slice(-MAX_ITEMS),
-    inProgress: (ai.inProgress || []).slice(0, MAX_ITEMS),
-    blockers: (ai.blockers || []).slice(0, MAX_ITEMS),
-    nextSteps: (ai.nextSteps || []).slice(0, MAX_ITEMS),
     todos: oldTodos.slice(-MAX_ITEMS),
     decisions: oldDecisions.slice(-MAX_ITEMS),
     constraints: Array.isArray(os.constraints) ? os.constraints : [],
   };
-  return { newState, addedCompleted };
+  for (const k of ['completed', 'inProgress', 'blockers', 'nextSteps'])
+    if (Array.isArray(os[k]) && os[k].length) newState[k] = os[k];
+  return { newState, addedCompleted: [] };
 }
 
-/* 供预览弹窗展示的旧/新差异 */
+/* 供预览弹窗展示的旧/新差异（待办39：属性级 diff） */
 function diffState(oldState, newState) {
   const o = oldState || {}, n = newState || {};
-  const setDiff = (a, b) => ({ added: (b || []).filter(x => !(a || []).includes(x)), removed: (a || []).filter(x => !(b || []).includes(x)) });
   const od = normDecisions(o.decisions), nd = normDecisions(n.decisions);
-  const odt = new Set(od.map(d => d.text)), ndt = new Set(nd.map(d => d.text));
+  const odt = new Set(od.map(d => d.text));
   const otd = new Map(normTodos(o.todos).map(t => [tkey(t.title), t])), ntd = normTodos(n.todos);
   const todosAdded = ntd.filter(t => !otd.has(tkey(t.title))).map(t => t.title);
   const todosDone = ntd.filter(t => t.done && otd.get(tkey(t.title)) && !otd.get(tkey(t.title)).done).map(t => t.title);
+  const attrsChanged = [];
+  for (const nt of ntd) {
+    const ot = otd.get(tkey(nt.title));
+    if (!ot) continue;
+    for (const k of ['blocked', 'related', 'next']) {
+      const a = ot[k] || '', b = nt[k] || '';
+      if (a !== b) attrsChanged.push({ title: nt.title, field: k, from: a, to: b });
+    }
+  }
   return {
     summaryChanged: (n.summary || '') !== (o.summary || ''),
-    completed: setDiff(strArray(o.completed), strArray(n.completed)),
-    inProgress: setDiff(strArray(o.inProgress), strArray(n.inProgress)),
-    blockers: setDiff(strArray(o.blockers), strArray(n.blockers)),
-    nextSteps: setDiff(strArray(o.nextSteps), strArray(n.nextSteps)),
-    decisionsAdded: nd.filter(d => !ndt.has(d.text) || !odt.has(d.text)).filter(d => !odt.has(d.text)).map(d => d.text),
-    todosAdded, todosDone,
+    decisionsAdded: nd.filter(d => !odt.has(d.text)).map(d => d.text),
+    todosAdded, todosDone, attrsChanged,
   };
 }
 
@@ -177,7 +186,12 @@ function migrate(db) {
     p.name = sanitizeStr(p.name) || '未命名项目';
     p.state = p.state && typeof p.state === 'object' ? p.state : {};
     const st = p.state;
-    for (const k of ['completed', 'inProgress', 'blockers', 'nextSteps']) st[k] = strArray(st[k]) || [];
+    /* 待办39：旧格式四个列表不再作为主体。空数组直接清掉减少存档噪音；
+       有历史内容的保留（不静默删数据），仅不再被 UI/AI 读写 */
+    for (const k of ['completed', 'inProgress', 'blockers', 'nextSteps']) {
+      const a = strArray(st[k]);
+      if (a && a.length) st[k] = a; else delete st[k];
+    }
     st.todos = normTodos(st.todos);
     st.decisions = normDecisions(st.decisions);
     st.constraints = Array.isArray(st.constraints) ? st.constraints.map(sanitizeStr).filter(Boolean) : [];
