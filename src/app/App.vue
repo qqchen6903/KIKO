@@ -112,7 +112,9 @@ body {
 
 .app { height: 100vh; display: flex; flex-direction: column; }
 .boot { height: 100vh; display: grid; place-items: center; color: var(--text-3); }
-.body { flex: 1; min-height: 0; display: grid; grid-template-columns: 248px 1fr; }
+/* 待办38：显式锁定行高 minmax(0,1fr)——默认 auto 行会被内容撑高、整页 document 滚动，
+   导致左右两栏被同一个滚动条带动；锁定后左右各自内部 overflow:auto 独立滚动。 */
+.body { flex: 1; min-height: 0; display: grid; grid-template-columns: 248px 1fr; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
 .main-col { display: flex; flex-direction: column; min-width: 0; }
 
 /* 无边框窗口：顶部拖拽条 + 自绘窗控（待办22/23） */

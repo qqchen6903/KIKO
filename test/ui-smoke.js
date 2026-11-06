@@ -57,6 +57,15 @@ async function evalJs(win, code) {
       return new Promise(res => setTimeout(() => res(!!document.querySelector('.grid') || !!document.querySelector('.empty-page')), 300)); })();
   `)));
 
+  /* 待办38：document 不得整页滚动，主区/侧栏各自内部滚动 */
+  ok('左右两栏独立滚动（待办38）', !!(await evalJs(win, `
+    return (() => { const de = document.documentElement;
+      const noDocScroll = de.scrollHeight <= window.innerHeight + 2;
+      const main = document.querySelector('.main-col .main');
+      return noDocScroll && !!main && getComputedStyle(main).overflowY === 'auto' && !!document.querySelector('.list');
+    })();
+  `)), 'document 出现整体滚动或主区非内滚容器');
+
   /* 桌宠窗口：应随应用创建，且能响应状态切换 */
   const pet = BrowserWindow.getAllWindows().find(w => String(w.webContents.getURL()).includes('pet.html'));
   ok('桌宠窗口已创建', !!pet);
