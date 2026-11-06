@@ -1,0 +1,6 @@
+node_modules/
+src/dist/
+release/
+test/.smoke-userdata/
+test/smoke-result.txt
+*.log

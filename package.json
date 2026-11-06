@@ -1,0 +1,60 @@
+{
+  "name": "kiko",
+  "version": "1.10.0",
+  "description": "KIKO · 多项目独立记忆与进度管理的桌面 AI 助手（Electron + Vue 3）",
+  "main": "src/main.js",
+  "author": "qqchen2",
+  "license": "MIT",
+  "scripts": {
+    "dev:renderer": "vite",
+    "build:renderer": "vite build",
+    "start": "npm run build:renderer && electron .",
+    "test": "node --test test/logic.test.js test/storage.test.js",
+    "dist:win": "npm run build:renderer && electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.0",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "jimp": "^1.6.1",
+    "vite": "^6.0.5",
+    "vue": "^3.5.13"
+  },
+  "build": {
+    "appId": "com.local.kiko",
+    "productName": "KIKO",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/main.js",
+      "src/preload.js",
+      "src/pet-preload.js",
+      "src/pet.html",
+      "src/storage.js",
+      "src/shared.js",
+      "src/dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "dependencies": {
+    "js-yaml": "^5.5.0"
+  }
+}
