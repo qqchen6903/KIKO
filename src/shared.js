@@ -115,6 +115,15 @@ function normTodos(v) {
       done: !!t.done, createdAt: sanitizeStr(t.createdAt), remindedAt: sanitizeStr(t.remindedAt), doneAt: sanitizeStr(t.doneAt),
     };
     for (const k of ['blocked', 'related', 'next']) { const v = sanitizeStr(t[k]); if (v) todo[k] = v; }
+    /* 待办50：续点标记（用户动作，AI 不管理这些字段；无状态时不落键保持存档轻量） */
+    if (['me', 'waiting', 'stuck', 'defer'].includes(t.pauseState)) {
+      todo.pauseState = t.pauseState;
+      todo.pauseAt = sanitizeStr(t.pauseAt);
+      todo.pauseNote = sanitizeStr(t.pauseNote);
+      todo.waitingFor = sanitizeStr(t.waitingFor);
+      todo.pauseFollow = normalizeDue(t.pauseFollow);
+      todo.pauseRemindedAt = sanitizeStr(t.pauseRemindedAt);
+    }
     out.push(todo);
   }
   return out.slice(0, MAX_ITEMS);

@@ -241,6 +241,18 @@ test('待办44：diffState 输出 pendingAdded；migrate 自动补齐待定池�
   assert.deepStrictEqual(db.projects[0].state.pending, [], '旧存档缺 pending 键时补空数组');
 });
 
+test('待办50：normTodos 续点字段——合法状态才落键，跟进日期归一 ISO', () => {
+  const list = S.normTodos([
+    { title: 'A', pauseState: 'waiting', waitingFor: '张三', pauseFollow: '明天 10:00', pauseAt: '2026-11-06T06:00:00.000Z', pauseNote: '等设计稿', pauseRemindedAt: 'r' },
+    { title: 'B', pauseState: '乱值' },
+  ]);
+  assert.strictEqual(list[0].pauseState, 'waiting');
+  assert.match(list[0].pauseFollow, /^2\d{3}-/);
+  assert.strictEqual(list[0].waitingFor, '张三');
+  assert.strictEqual(list[0].pauseNote, '等设计稿');
+  assert.ok(!('pauseState' in list[1]), '非法续点状态不落键');
+});
+
 test('fmtShort/fmtLong：ISO 与旧版中文时间串均可展示', () => {
   assert.match(S.fmtShort('2026-11-05T09:08:00.000Z'), /\d{2}-\d{2} \d{2}:\d{2}/);
   assert.strictEqual(S.fmtShort(''), '');

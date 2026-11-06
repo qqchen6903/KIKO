@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('assistant', {
   load: () => ipcRenderer.invoke('data:load'),
   save: data => ipcRenderer.invoke('data:save', data),
+  setActive: id => ipcRenderer.invoke('app:setActive', id), /* 待办45②：切换项目只写 index */
   saveSettings: value => ipcRenderer.invoke('settings:save', value),
   updateWithAI: payload => ipcRenderer.invoke('ai:update', payload),
   testProvider: value => ipcRenderer.invoke('provider:test', value),

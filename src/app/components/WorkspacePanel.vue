@@ -15,6 +15,15 @@ const canUndo = computed(() => !!current.value?.logs.some(l => !l.system && !l.r
 /* 待办39：横幅统计改由待办属性驱动 */
 const blockedCount = computed(() => (current.value?.state.todos || []).filter(t => !t.done && t.blocked).length);
 const nextCount = computed(() => (current.value?.state.todos || []).filter(t => !t.done && t.next).length);
+/* 待办50③：切回项目时横幅置顶显示最近续点 */
+const PAUSE_BANNER = { me: '✋ 我来继续', waiting: '⏳ 等他人', stuck: '🚧 卡住了', defer: '💤 先放一放' };
+const latestPause = computed(() => {
+  const list = (current.value?.state.todos || []).filter(t => !t.done && t.pauseState && t.pauseAt);
+  if (!list.length) return null;
+  const t = [...list].sort((a, b) => String(b.pauseAt).localeCompare(String(a.pauseAt)))[0];
+  const detail = `${t.pauseState === 'waiting' && t.waitingFor ? `等 ${t.waitingFor}${t.pauseFollow ? '（跟进 ' + S.fmtShort(t.pauseFollow) + '）' : ''} · ` : ''}${S.fmtShort(t.pauseAt)} 标记${t.pauseNote ? ` · ${t.pauseNote}` : ''}`;
+  return { label: `${PAUSE_BANNER[t.pauseState]}「${t.title}」`, detail };
+});
 
 function editProject() {
   const p = current.value;
@@ -55,6 +64,7 @@ function editProject() {
           <span v-if="!blockedCount && !nextCount" class="muted">暂无阻塞与待推进事项，可直接继续记录。</span>
         </div>
       </Transition>
+      <div class="banner pausebar" v-if="latestPause"><b>{{ latestPause.label }}</b>　<span class="muted">{{ latestPause.detail }}</span></div>
       <div class="grid">
         <SummaryCard class="span2" />
         <TodoCard class="span2" />
@@ -82,6 +92,7 @@ function editProject() {
 .seg { display: inline-block; margin: 6px 8px 0 0; padding: 2px 10px; border-radius: 980px; font-size: 11.5px; background: #fff; }
 .seg.red { color: var(--red); }
 .seg.blue { color: var(--accent); }
+.banner.pausebar { background: rgba(255, 246, 226, .72); color: #8a5a00; margin-bottom: 14px; }
 .banner > .btn { margin-left: 10px; vertical-align: 1px; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .span2 { grid-column: 1 / -1; }

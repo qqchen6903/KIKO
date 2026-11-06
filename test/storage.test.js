@@ -55,6 +55,16 @@ test('待办39：三属性 frontmatter 往返无损，正文渲染子行且旧�
   assert.strictEqual(t.next, '先写mock');
 });
 
+test('待办45①：pruneLogsForWrite 只保留最近10条非系统快照，正文留全', () => {
+  const logs = Array.from({ length: 12 }, (_, i) => ({ at: 't' + i, message: 'm' + i, snapshotBefore: { x: i }, applied: { y: i } }));
+  logs.push({ at: 'sys', system: true, message: '系统', snapshotBefore: { keep: true } });
+  const pruned = store.pruneLogsForWrite(logs);
+  assert.strictEqual(pruned.length, 13);
+  assert.strictEqual(pruned.filter(l => l.snapshotBefore !== undefined).length, 11, '10条非系统+1条系统(原样)');
+  assert.strictEqual(pruned[0].message, 'm0', '文字记录不丢');
+  assert.ok(pruned[11].snapshotBefore, '最近一条非系统更新保留快照（撤销对象）');
+});
+
 test('待办44：待定池 md 正文渲染与 frontmatter 往返', () => {
   const p = sampleDb().projects[0];
   p.state.pending = S.normPending([{ text: '下月末部署暂定', waiting: '客户确认时间', followUp: '2026-11-30 10:00', source: '时间暂定', state: 'discarded' }]);

@@ -39,16 +39,26 @@ function projectFile(root, p) {
 function projectToMd(p) {
   const fm = yaml.dump(
     { meta: { id: p.id, name: p.name, goal: p.goal || '', status: p.status || '进行中', createdAt: p.createdAt || '', updatedAt: p.updatedAt || '', lastWorkedAt: p.lastWorkedAt || '' },
-      state: p.state, logs: p.logs || [] },
+      state: p.state, logs: pruneLogsForWrite(p.logs) },
     { lineWidth: 0, noRefs: true, sortKeys: false },
   );
   const st = p.state || {};
   /* 待办39：待办行下挂 阻塞点/关联/下一步 属性子行；旧四状态小节（sec 助手随之删除）不再渲染 */
   const ATTR = { blocked: '阻塞点', related: '关联', next: '下一步' };
+  const PAUSE = { me: '我来继续', waiting: '等他人', stuck: '卡住了', defer: '先放一放' };
   const todoLine = t => {
     const main = `- [${t.done ? 'x' : ' '}] ${t.title}${t.due ? `（到期 ${t.due}` : ''}${t.priority && t.priority !== '普通' ? `，${t.priority}优先级` : ''}${t.due ? '）' : ''}`;
     const attrs = Object.entries(ATTR).map(([k, label]) => t[k] ? `\n  - ${label}：${t[k]}` : '').join('');
-    return main + attrs;
+    /* 待办50：续点子行 */
+    let pause = '';
+    if (PAUSE[t.pauseState]) {
+      pause = `\n  - 续点：${PAUSE[t.pauseState]}`
+        + `${t.pauseState === 'waiting' && t.waitingFor ? `（等：${t.waitingFor}）` : ''}`
+        + `${t.pauseFollow ? ` 跟进 ${t.pauseFollow}` : ''}`
+        + `${t.pauseAt ? ` · ${t.pauseAt} 标记` : ''}`
+        + `${t.pauseNote ? ` · 想法：${t.pauseNote}` : ''}`;
+    }
+    return main + attrs + pause;
   };
   const decLine = d => `- ${d.at ? `[${d.at}] ` : ''}${d.text}`;
   const logBlock = l => l.system
@@ -107,10 +117,28 @@ function writeIndex(root, db) {
     settings: db.settings || {},
   }, null, 2));
 }
+/* 待办45① 历史日志瘦身：只有最近 keep 条非系统更新保留 snapshotBefore/applied 快照，
+ * 更早的落盘时去掉快照只留文字（撤销只针对最后一次更新，功能不受影响；内存中不裁剪）。 */
+function pruneLogsForWrite(logs, keep = 10) {
+  const snapIdx = [];
+  (logs || []).forEach((l, i) => { if (l && !l.system && (l.snapshotBefore !== undefined || l.applied !== undefined)) snapIdx.push(i); });
+  const drop = new Set(snapIdx.slice(0, Math.max(0, snapIdx.length - keep)));
+  return (logs || []).map((l, i) => {
+    if (!drop.has(i)) return l;
+    const { snapshotBefore, applied, ...rest } = l;
+    return rest;
+  });
+}
+
+/* 待办45② 脏跳过：渲染层每次全量送主进程，但内容未变的项目文件不再重写（大存档下保存提速关键） */
+const mdCache = new Map();
 function writeProject(root, p) {
   const { target, stale } = projectFile(root, p);
-  atomicWrite(target, projectToMd(p));
-  for (const s of stale) { try { fs.unlinkSync(s); } catch {} }
+  const md = projectToMd(p);
+  const unchanged = mdCache.get(target) === md;
+  if (!unchanged) { atomicWrite(target, md); mdCache.set(target, md); }
+  for (const s of stale) { try { fs.unlinkSync(s); mdCache.delete(s); } catch {} }
+  return !unchanged;
 }
 function saveWorkspace(root, db) {
   writeIndex(root, db);
@@ -155,4 +183,4 @@ function copyTree(from, to) {
 /* ---------- 导出（单文件 JSON 备份）/ 恢复（JSON → md 全重写） ---------- */
 function exportSnapshot(db) { return JSON.stringify(db, null, 2); }
 
-module.exports = { loadWorkspace, saveWorkspace, writeIndex, writeProject, touchProject, ensureMigrated, copyTree, projectToMd, mdToProject, exportSnapshot, atomicWrite, shortId };
+module.exports = { loadWorkspace, saveWorkspace, writeIndex, writeProject, touchProject, ensureMigrated, copyTree, projectToMd, mdToProject, pruneLogsForWrite, exportSnapshot, atomicWrite, shortId };

@@ -252,6 +252,7 @@ function checkReminders() {
     const now = Date.now();
     const due = [];
     const pendDue = [];
+    const pauseDue = [];
     for (const p of data.projects) {
       for (const t of (p.state && p.state.todos) || []) {
         if (t.done || !t.due || t.remindedAt) continue;
@@ -264,8 +265,14 @@ function checkReminders() {
         const ts = Date.parse(x.followUp);
         if (!isNaN(ts) && ts <= now && now - ts < 6 * 3600e3) pendDue.push({ p, x });
       }
+      /* 待办50②：标了"等他人"的待办跟进日期到了，催我去催（改跟进日期后 pauseRemindedAt 清空可再提醒） */
+      for (const t of (p.state && p.state.todos) || []) {
+        if (t.done || t.pauseState !== 'waiting' || !t.pauseFollow || t.pauseRemindedAt) continue;
+        const ts = Date.parse(t.pauseFollow);
+        if (!isNaN(ts) && ts <= now && now - ts < 6 * 3600e3) pauseDue.push({ p, t });
+      }
     }
-    if (!due.length && !pendDue.length) return;
+    if (!due.length && !pendDue.length && !pauseDue.length) return;
     queueWrite(() => {
       const d = readData();
       const touched = new Map();
@@ -285,6 +292,14 @@ function checkReminders() {
           }
         }
       }
+      for (const { p, t } of pauseDue) {
+        for (const pp of d.projects) {
+          if (pp.id !== p.id) continue;
+          for (const tt of (pp.state && pp.state.todos) || []) {
+            if (tt.title === t.title && tt.pauseState === 'waiting' && tt.pauseFollow === t.pauseFollow && !tt.pauseRemindedAt) { tt.pauseRemindedAt = Shared.nowIso(); touched.set(pp.id, pp); }
+          }
+        }
+      }
       for (const pp of touched.values()) Storage.touchProject(dataRoot, pp);
     }).then(() => {
       for (const { p, t } of due) {
@@ -298,6 +313,12 @@ function checkReminders() {
         n.on('click', showWin);
         n.show();
         sayOnPet(`待定「${x.text}」该跟进确认啦～`);
+      }
+      for (const { p, t } of pauseDue) {
+        const n = new Notification({ title: 'KIKO · 催办提醒', body: `【${p.name}】「${t.title}」在等${t.waitingFor || '他人'}回复，跟进时间到了，去催一下～` });
+        n.on('click', showWin);
+        n.show();
+        sayOnPet(`「${t.title}」该去催一下啦～`);
       }
     });
   } catch {}
@@ -355,6 +376,11 @@ ipcMain.handle('data:load', () => {
   };
 });
 ipcMain.handle('data:save', async (_e, data) => { await saveWorkspace(data); return true; });
+/* 待办45②：切换项目只更新 index.json 的 activeProjectId，不再全库落盘 */
+ipcMain.handle('app:setActive', async (_e, id) => {
+  await queueWrite(() => { const d = readData(); d.activeProjectId = typeof id === 'string' ? id : null; Storage.writeIndex(dataRoot, d); });
+  return true;
+});
 ipcMain.handle('settings:save', async (_e, { settings, apiKey }) => {
   await patchSettings(settings);
   if (typeof apiKey === 'string' && apiKey.trim()) saveKey(apiKey.trim());
@@ -538,7 +564,7 @@ app.whenReady().then(() => {
   const sc = registerShortcut();
   if (typeof sc === 'string') console.warn('[启动]', sc);
   setTimeout(checkReminders, 15000);
-  setInterval(checkReminders, 60000);
+  setInterval(checkReminders, 300000); /* 待办45③：提醒扫描 60s→5min，全量重解析 md 的频率降一个量级（到期提醒容忍窗口 6h，无感知） */
 });
 
 /* ---------- 桌宠 IPC（拖动/吸边/探出） ---------- */
@@ -592,5 +618,15 @@ ipcMain.handle('pet:set-state', (_e, state) => {
   if (petWin && !petWin.isDestroyed()) petWin.webContents.send('pet:state', petState.current);
   return true;
 });
-app.on('before-quit', () => { app.isQuitting = true; globalShortcut.unregisterAll(); });
+/* 待办45②：渲染层 persist 有 500ms 防抖，退出前强制冲刷未落盘的编辑（带 800ms 兜底放行） */
+let quitFlushed = false;
+app.on('before-quit', (e) => {
+  app.isQuitting = true;
+  globalShortcut.unregisterAll();
+  if (quitFlushed || !win || win.isDestroyed()) return;
+  e.preventDefault();
+  quitFlushed = true;
+  const done = () => setTimeout(() => app.quit(), 60);
+  win.webContents.executeJavaScript('window.__kikoFlush ? window.__kikoFlush() : undefined').then(() => {}).catch(() => {}).then(done);
+});
 app.on('window-all-closed', () => {});

@@ -3,18 +3,25 @@
  * 行内完成/跳转/删除，底部快速新增，全清时 KIKO 庆祝。 */
 import { computed, ref } from 'vue';
 import S from '../shared-bridge';
-import { store, selectProject, toggleTodoIn, removeTodoIn, addTodoIn } from '../store/workspace';
+import { store, selectProject, toggleTodoIn, removeTodoIn, addTodoIn, updateTodoIn, markPauseIn } from '../store/workspace';
 import AppIcon from './AppIcon.vue';
 
 const PW = { '高': 0, '普通': 1, '低': 2 };
 
-const rows = computed(() => {
+/* 待办50：标了"等他人"的待办移出"我该干嘛"主列表，单独进"等待中"分组（球不在我手里不占心智） */
+const PAUSE_LABEL = { me: '我来继续', waiting: '等他人', stuck: '卡住了', defer: '先放一放' };
+const allUndone = computed(() => {
   const out = [];
   for (const p of store.db?.projects || []) {
     (p.state?.todos || []).forEach((t, i) => {
       if (!t.done) out.push({ pid: p.id, pname: p.name, i, t });
     });
   }
+  return out;
+});
+const waitingRows = computed(() => allUndone.value.filter(r => r.t.pauseState === 'waiting').sort((a, b) => String(a.t.pauseFollow || '').localeCompare(String(b.t.pauseFollow || ''))));
+const rows = computed(() => {
+  const out = allUndone.value.filter(r => r.t.pauseState !== 'waiting');
   const key = r => (r.t.due ? Date.parse(r.t.due) : Number.MAX_SAFE_INTEGER);
   out.sort((a, b) => (PW[a.t.priority] ?? 1) - (PW[b.t.priority] ?? 1) || key(a) - key(b));
   return out;
@@ -27,12 +34,19 @@ const today = computed(() => rows.value.filter(r => {
   const d = new Date(r.t.due), n = new Date();
   return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
 }));
-const recentDone = computed(() => {
+const allDoneSorted = computed(() => {
   const all = [];
   for (const p of store.db?.projects || []) {
     (p.state?.todos || []).forEach((t, i) => { if (t.done) all.push({ pid: p.id, pname: p.name, i, t }); });
   }
-  return all.sort((a, b) => String(b.t.doneAt || '').localeCompare(String(a.t.doneAt || ''))).slice(0, 3);
+  return all.sort((a, b) => String(b.t.doneAt || '').localeCompare(String(a.t.doneAt || '')));
+});
+/* 待办47：默认最近3条，可展开查看最近一周的完成（带完成时间） */
+const showWeekDone = ref(false);
+const recentDone = computed(() => {
+  if (!showWeekDone.value) return allDoneSorted.value.slice(0, 3);
+  const cut = Date.now() - 7 * 864e5;
+  return allDoneSorted.value.filter(r => !r.t.doneAt || Date.parse(r.t.doneAt) >= cut);
 });
 const isOver = t => t.due && Date.parse(t.due) < Date.now();
 
@@ -47,20 +61,31 @@ const pendNeed = computed(() => {
   return out.sort((a, b) => Date.parse(a.x.followUp) - Date.parse(b.x.followUp));
 });
 
-/* 快速新增：到期用原生日期+时间选择器（待办19） */
+/* 快速新增：待办49③ 合并为单个 datetime-local 控件 */
 const nPid = ref('');
 const nTitle = ref('');
-const nDate = ref('');
-const nTime = ref('');
+const nDue = ref('');
 const nPri = ref('普通');
 function submitAdd() {
   const pid = nPid.value || store.db?.projects[0]?.id;
   if (!pid || !nTitle.value.trim()) return;
-  const dueRaw = nDate.value ? `${nDate.value} ${nTime.value || '09:00'}` : '';
-  addTodoIn(pid, { title: nTitle.value, dueRaw, priority: nPri.value });
-  nTitle.value = ''; nDate.value = ''; nTime.value = ''; nPri.value = '普通';
+  addTodoIn(pid, { title: nTitle.value, dueRaw: nDue.value, priority: nPri.value });
+  nTitle.value = ''; nDue.value = ''; nPri.value = '普通';
 }
 function goto(pid) { selectProject(pid); }
+
+/* 待办49④：总览页每条待办就地展开编辑（到期/优先级/三属性），保存即同步落盘 */
+const toLocalInput = (iso) => { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+const editKey = ref('');
+const eRow = ref({ title: '', due: '', priority: '普通', blocked: '', related: '', next: '' });
+function startRowEdit(r) {
+  editKey.value = r.pid + ':' + r.i;
+  eRow.value = { title: r.t.title, due: toLocalInput(r.t.due), priority: r.t.priority || '普通', blocked: r.t.blocked || '', related: r.t.related || '', next: r.t.next || '' };
+}
+function submitRowEdit(r) {
+  updateTodoIn(r.pid, r.i, { title: eRow.value.title, dueRaw: eRow.value.due, priority: eRow.value.priority, blocked: eRow.value.blocked, related: eRow.value.related, next: eRow.value.next });
+  editKey.value = '';
+}
 </script>
 
 <template>
@@ -81,20 +106,56 @@ function goto(pid) { selectProject(pid); }
     <section class="card list-card" v-if="rows.length">
       <TransitionGroup name="rows" tag="div">
         <div v-for="r in rows" :key="r.pid + ':' + r.i" class="trow" :class="{ over: isOver(r.t) }">
-          <input type="checkbox" class="chk" :checked="false" @change="toggleTodoIn(r.pid, r.i)" />
-          <div class="grow">
-            <div class="title">{{ r.t.title }}</div>
-            <div class="sub">
-              <button class="pj" @click="goto(r.pid)">{{ r.pname }} ↗</button>
-              <span class="tag" :class="{ hi: r.t.priority === '高', lo: r.t.priority === '低' }" v-if="r.t.priority !== '普通'">{{ r.t.priority }}</span>
-              <span class="due" :class="{ over: isOver(r.t) }" v-if="r.t.due">{{ isOver(r.t) ? '已过期 · ' : '' }}{{ S.dueLabel(r.t.due) }}</span>
-              <span class="tag blocked" v-if="r.t.blocked" :title="'阻塞点：' + r.t.blocked">阻塞</span>
-              <span class="next" v-if="r.t.next" :title="'下一步：' + r.t.next">下一步：{{ r.t.next }}</span>
+          <template v-if="editKey === r.pid + ':' + r.i">
+            <span class="editform">
+              <span class="frow"><i class="flab">任务</i><input class="fte" v-model="eRow.title" /></span>
+              <span class="frow"><i class="flab">到期</i><input type="datetime-local" class="fte" v-model="eRow.due" title="留空不提醒" /></span>
+              <span class="frow"><i class="flab">优先级</i><select class="fte fshort" v-model="eRow.priority"><option v-for="p in S.PRIORITIES" :key="p">{{ p }}</option></select></span>
+              <span class="frow"><i class="flab b">阻塞点</i><input class="fte" v-model="eRow.blocked" placeholder="卡在哪里（留空清除）" /></span>
+              <span class="frow"><i class="flab">关联</i><input class="fte" v-model="eRow.related" placeholder="链接/文件/人（留空清除）" /></span>
+              <span class="frow"><i class="flab">下一步</i><input class="fte" v-model="eRow.next" placeholder="动作（留空清除）" /></span>
+              <span class="frow fbtns"><button class="mini ok" @click="submitRowEdit(r)" title="保存"><AppIcon name="check" :size="13" /></button><button class="mini danger" @click="editKey = ''" title="取消"><AppIcon name="x" :size="12" /></button></span>
+            </span>
+          </template>
+          <template v-else>
+            <input type="checkbox" class="chk" :checked="false" @change="toggleTodoIn(r.pid, r.i)" />
+            <div class="grow">
+              <div class="title">{{ r.t.title }}</div>
+              <div class="sub">
+                <button class="pj" @click="goto(r.pid)">{{ r.pname }} ↗</button>
+                <span class="tag" :class="{ hi: r.t.priority === '高', lo: r.t.priority === '低' }" v-if="r.t.priority !== '普通'">{{ r.t.priority }}</span>
+                <span class="due" :class="{ over: isOver(r.t) }" v-if="r.t.due">{{ isOver(r.t) ? '已过期 · ' : '' }}{{ S.dueLabel(r.t.due) }}</span>
+                <span class="tag blocked" v-if="r.t.blocked" :title="'阻塞点：' + r.t.blocked">阻塞</span>
+                <span class="tag pz" v-if="r.t.pauseState && r.t.pauseState !== 'waiting'" :title="'续点：' + (r.t.pauseNote || PAUSE_LABEL[r.t.pauseState])">⏸ {{ PAUSE_LABEL[r.t.pauseState] }}</span>
+                <span class="next" v-if="r.t.next" :title="'下一步：' + r.t.next">下一步：{{ r.t.next }}</span>
+              </div>
             </div>
-          </div>
-          <button class="mini danger" title="删除" @click="removeTodoIn(r.pid, r.i)"><AppIcon name="x" :size="12" /></button>
+            <div class="ops">
+              <button class="mini" title="编辑" @click="startRowEdit(r)"><AppIcon name="pencil" :size="12" /></button>
+              <button class="mini danger" title="删除" @click="removeTodoIn(r.pid, r.i)"><AppIcon name="x" :size="12" /></button>
+            </div>
+          </template>
         </div>
       </TransitionGroup>
+    </section>
+
+    <section class="card wait-card" v-if="waitingRows.length">
+      <div class="cardhead"><h3>⏳ 等待中 <span class="sub2">球在别人手里，跟进时间到了 KIKO 会催你去催</span></h3></div>
+      <div v-for="r in waitingRows" :key="'w' + r.pid + ':' + r.i" class="trow">
+        <span class="pdot"></span>
+        <div class="grow">
+          <div class="title">{{ r.t.title }}</div>
+          <div class="sub">
+            <button class="pj" @click="goto(r.pid)">{{ r.pname }} ↗</button>
+            <span class="pw" v-if="r.t.waitingFor">在等：{{ r.t.waitingFor }}</span>
+            <span class="due" v-if="r.t.pauseFollow">跟进 {{ S.dueLabel(r.t.pauseFollow) }}</span>
+            <span class="next" v-if="r.t.pauseNote" title="当时的想法">{{ r.t.pauseNote }}</span>
+          </div>
+        </div>
+        <div class="ops">
+          <button class="mini" title="我来继续（移出等待中）" @click="markPauseIn(r.pid, r.i, { state: 'me' })"><AppIcon name="undo" :size="12" /></button>
+        </div>
+      </div>
     </section>
 
     <section class="card pend-card" v-if="pendNeed.length">
@@ -127,20 +188,24 @@ function goto(pid) { selectProject(pid); }
           <option v-for="p in store.db?.projects || []" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
         <input class="t" v-model="nTitle" placeholder="要做什么，回车保存" @keyup.enter="submitAdd" />
-        <input class="dt" v-model="nDate" type="date" title="到期日期（可选）" />
-        <input class="dt" v-model="nTime" type="time" title="到期时间（选日期后默认 09:00）" />
+        <input class="dt" v-model="nDue" type="datetime-local" title="到期日期时间（可选）" />
         <select v-model="nPri"><option v-for="p in S.PRIORITIES" :key="p">{{ p }}</option></select>
         <button class="btn primary" @click="submitAdd" :disabled="!nTitle.trim() || !(nPid || store.db?.projects?.length)">添加</button>
       </div>
     </section>
 
     <section class="card done-card" v-if="recentDone.length">
-      <div class="cardhead"><h3>最近完成</h3></div>
+      <div class="cardhead">
+        <h3>最近完成</h3>
+        <button class="weekbtn" v-if="allDoneSorted.length > 3" @click="showWeekDone = !showWeekDone">
+          <AppIcon name="chevron-down" :size="11" class="chev" :class="{ open: showWeekDone }" />{{ showWeekDone ? '收起' : '展开最近一周' }}
+        </button>
+      </div>
       <div v-for="r in recentDone" :key="'d' + r.pid + r.i" class="trow done">
         <span class="ddot">✓</span>
         <div class="grow">
           <div class="title">{{ r.t.title }}</div>
-          <div class="sub"><span class="pj2">{{ r.pname }}</span><span class="due2" v-if="r.t.doneAt">{{ S.fmtShort(r.t.doneAt) }}</span></div>
+          <div class="sub"><span class="pj2">{{ r.pname }}</span><span class="due2" v-if="r.t.doneAt">完成于 {{ S.fmtShort(r.t.doneAt) }}</span></div>
         </div>
         <button class="mini" title="重新打开" @click="toggleTodoIn(r.pid, r.i)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 9.5a8.5 8.5 0 1 1 2.4 8.1"/><path d="M3.5 4.5v5h5"/></svg></button>
       </div>
@@ -175,11 +240,29 @@ function goto(pid) { selectProject(pid); }
 .tag.hi { background: rgba(255,214,210,.65); color: #b02a31; }
 .tag.lo { background: rgba(228,232,241,.7); color: var(--text-2); }
 .tag.blocked { background: rgba(255,214,210,.8); color: #b02a31; font-weight: 600; }
+.tag.pz { background: rgba(255,240,214,.8); color: #8a5a00; font-weight: 600; }
+/* 待办49④：总览行就地编辑（竖向表单，与项目页 TodoCard 同款） */
+.ops { margin-left: auto; opacity: .38; transition: opacity .15s var(--ease); display: flex; }
+.trow:hover .ops { opacity: 1; }
+.editform { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; padding: 6px 0 4px; }
+.frow { display: flex; align-items: center; gap: 8px; }
+.flab { font-style: normal; font-size: 11px; color: var(--text-3); width: 46px; flex-shrink: 0; text-align: right; }
+.flab.b { color: #b02a31; }
+.fbtns { justify-content: flex-end; }
+.fte { border: 1px solid #dcdce1; border-radius: 8px; padding: 5px 9px; font-size: 12.5px; outline: none; flex: 1; min-width: 0; background: rgba(255, 255, 255, .7); }
+.fte:focus { border-color: var(--accent); }
+.fte.fshort { flex: 0 0 auto; min-width: 90px; }
 /* 待办44：待确认分区 */
 .pend-card h3 { display: flex; align-items: center; gap: 6px; }
 .sub2 { font-size: 11px; color: var(--text-3); font-weight: 400; }
 .pdot { width: 8px; height: 8px; border-radius: 50%; background: var(--orange); flex-shrink: 0; box-shadow: inset 0 -1px 1px rgba(0,0,0,.12), inset 0 1px 1px rgba(255,255,255,.7); }
 .pw { font-size: 11px; color: #1c5aa8; }
+/* 待办47：最近完成展开按钮（与项目页 TodoCard 同风格） */
+.cardhead { display: flex; justify-content: space-between; align-items: center; }
+.weekbtn { border: 0; background: rgba(11, 18, 32, .045); color: var(--text-2); font-size: 11.5px; font-family: inherit; border-radius: 8px; padding: 4px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.weekbtn:hover { background: rgba(11, 18, 32, .08); }
+.chev { transition: transform .2s var(--ease); }
+.chev.open { transform: rotate(180deg); }
 .next { font-size: 11px; color: #1c5aa8; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chk { appearance: none; -webkit-appearance: none; width: 19px; height: 19px; border-radius: 50%; margin: 0; flex-shrink: 0; cursor: pointer; border: 1.5px solid rgba(11,18,32,.22); background: rgba(255,255,255,.75); box-shadow: inset 0 1px 2px rgba(14,38,86,.08); transition: all .22s var(--spring); }
 .chk:hover { border-color: rgba(29,158,90,.6); background: #fff; }

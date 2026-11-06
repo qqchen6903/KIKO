@@ -48,7 +48,7 @@ function timeOf(d) { return d.at ? S.fmtShort(d.at) : ''; }
 h3 { font-size: 13px; margin: 0; color: var(--text-2); font-weight: 600; display: flex; align-items: center; }
 .hint { font-size: 11px; color: var(--text-3); font-weight: 400; margin-left: 8px; }
 .hicon { color: var(--indigo); }
-.addbtn { border: 1px solid rgba(11, 18, 32, .12); color: var(--text-3); background: rgba(255, 255, 255, .4); border-radius: 980px; width: 23px; height: 23px; display: grid; place-items: center; cursor: pointer; transition: all .16s var(--spring); }
+.addbtn { padding: 0; border: 1px solid rgba(11, 18, 32, .12); color: var(--text-3); background: rgba(255, 255, 255, .4); border-radius: 980px; width: 23px; height: 23px; display: grid; place-items: center; cursor: pointer; transition: all .16s var(--spring); }
 .addbtn:hover { color: var(--accent); border-color: rgba(0, 113, 227, .5); background: rgba(255, 255, 255, .8); transform: scale(1.08); }
 .list { position: relative; }
 .drow { display: flex; align-items: baseline; gap: 10px; padding: 5px 2px; font-size: 13px; }
@@ -59,7 +59,7 @@ h3 { font-size: 13px; margin: 0; color: var(--text-2); font-weight: 600; display
 .addrow { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
 .addrow input { flex: 1; border: 1px solid #dcdce1; border-radius: 9px; padding: 7px 10px; font-size: 12.5px; outline: none; }
 .addrow input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0, 113, 227, .12); }
-.empty { color: var(--text-3); font-size: 12.5px; margin: 4px 0; }
+.empty { color: #b6c1d4; font-size: 12.5px; margin: 4px 0; }
 .rows-enter-active { transition: all .24s var(--ease); }
 .rows-leave-active { transition: all .16s ease-in; }
 .rows-enter-from { opacity: 0; transform: translateY(5px); }

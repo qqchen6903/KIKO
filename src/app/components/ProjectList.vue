@@ -142,7 +142,7 @@ function closeMenu() { menuOpen.value = false; }
 .dot.run { background: radial-gradient(circle at 35% 30%, #58c887, var(--green)); box-shadow: inset 0 1px 1px rgba(255, 255, 255, .7), 0 0 0 2.5px rgba(29, 158, 90, .14); }
 .dot.wait { background: radial-gradient(circle at 35% 30%, #ffbc57, var(--orange)); box-shadow: inset 0 1px 1px rgba(255, 255, 255, .7), 0 0 0 2.5px rgba(217, 130, 10, .14); }
 .dot.idle { background: radial-gradient(circle at 35% 30%, #c7ccd4, #9aa4b1); }
-.empty { color: var(--text-3); font-size: 12.5px; padding: 16px 12px; line-height: 1.7; }
+.empty { color: #b6c1d4; font-size: 12.5px; padding: 16px 12px; line-height: 1.7; }
 
 /* 左下角功能菜单（待办23） */
 .footbar { display: flex; align-items: center; gap: 10px; padding: 8px 4px 0; border-top: 1px solid rgba(11, 18, 32, .06); margin-top: 8px; position: relative; z-index: 42; }

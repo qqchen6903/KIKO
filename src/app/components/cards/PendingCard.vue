@@ -112,7 +112,7 @@ function submitPromote() {
 h3 { font-size: 13px; margin: 0; color: var(--text-2); font-weight: 600; display: flex; align-items: center; }
 .hint { font-size: 11px; color: var(--text-3); font-weight: 400; margin-left: 8px; }
 .hicon { color: var(--indigo); }
-.addbtn { border: 1px solid rgba(11, 18, 32, .12); color: var(--text-3); background: rgba(255, 255, 255, .4); border-radius: 980px; width: 23px; height: 23px; display: grid; place-items: center; cursor: pointer; transition: all .16s var(--spring); }
+.addbtn { padding: 0; border: 1px solid rgba(11, 18, 32, .12); color: var(--text-3); background: rgba(255, 255, 255, .4); border-radius: 980px; width: 23px; height: 23px; display: grid; place-items: center; cursor: pointer; transition: all .16s var(--spring); }
 .addbtn:hover { color: var(--accent); border-color: rgba(0, 113, 227, .5); background: rgba(255, 255, 255, .8); transform: scale(1.08); }
 .list { position: relative; }
 .prow { display: flex; align-items: center; gap: 9px; padding: 7px 2px; font-size: 13px; border-radius: 9px; }
@@ -142,7 +142,7 @@ h3 { font-size: 13px; margin: 0; color: var(--text-2); font-weight: 600; display
 .addrow input:first-child { flex: 2; }
 .addrow input:nth-child(2) { flex: 1.4; }
 .addrow input:focus { background: rgba(255, 255, 255, .88); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0, 113, 227, .14); }
-.empty { color: var(--text-3); font-size: 12.5px; margin: 4px 0; line-height: 1.6; }
+.empty { color: #b6c1d4; font-size: 12.5px; margin: 4px 0; line-height: 1.6; }
 .rows-enter-active { transition: all .24s var(--ease); }
 .rows-leave-active { transition: all .16s ease-in; }
 .rows-enter-from { opacity: 0; transform: translateY(5px); }

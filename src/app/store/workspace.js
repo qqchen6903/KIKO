@@ -36,25 +36,39 @@ export async function load() {
   store.loaded = true;
 }
 
-export async function persist() {
-  if (!store.db) return;
+/* 待办45②：防抖合并落盘——距上次保存>500ms 时立即写（无数据丢失窗口）；
+ * 500ms 内的连续操作合并为一次写；退出前 __kikoFlush() 强制冲刷并等主进程确认。 */
+let lastSaveAt = 0;
+let saveTimer = null;
+let waiters = [];
+async function doSaveNow() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   store.saving = true;
   try {
-    // Vue reactive Proxy 无法直接过 IPC 克隆，序列化前深度还原为纯数据
     await window.assistant.save(plain(store.db));
     store.lastSaved = new Date().toLocaleTimeString('zh-CN', { hour12: false });
   } catch (e) {
     toast('保存失败：' + (e?.message || e), 'error');
   } finally {
     store.saving = false;
+    lastSaveAt = Date.now();
+    const ws = waiters; waiters = [];
+    for (const r of ws) r();
   }
 }
+export function persist(immediate = false) {
+  if (!store.db) return Promise.resolve();
+  if (immediate || Date.now() - lastSaveAt > 500) return doSaveNow();
+  return new Promise(res => { waiters.push(res); clearTimeout(saveTimer); saveTimer = setTimeout(doSaveNow, 500); });
+}
+window.__kikoFlush = () => persist(true);
 
 export function selectProject(id) {
   store.activeId = id;
   if (store.db) store.db.activeProjectId = id;
   ui.view = 'project';
-  persist();
+  /* 待办45②：切换项目只更新主进程 index.json，不再全库深克隆+重写 */
+  if (window.assistant.setActive) window.assistant.setActive(id);
 }
 
 export function createProject({ name, goal }) {
@@ -127,6 +141,29 @@ export function updateTodo(idx, patch) {
   deriveStatus();
   persist();
 }
+/* ---------- 待办50 · 续点标记 ---------- */
+const PAUSE_STATES = ['me', 'waiting', 'stuck', 'defer'];
+function _markPause(p, idx, patch) {
+  const t = p?.state?.todos?.[idx];
+  if (!t) return false;
+  const s = PAUSE_STATES.includes(patch.state) ? patch.state : '';
+  if (!s) {
+    t.pauseState = ''; delete t.waitingFor; delete t.pauseFollow; delete t.pauseAt; delete t.pauseNote; delete t.pauseRemindedAt;
+  } else {
+    t.pauseState = s;
+    t.pauseAt = S.nowIso();
+    t.pauseRemindedAt = '';
+    if (patch.waitingFor !== undefined) t.waitingFor = S.sanitizeStr(patch.waitingFor);
+    if (s === 'waiting' && patch.followRaw !== undefined) t.pauseFollow = S.normalizeDue(patch.followRaw);
+    if (patch.note !== undefined) t.pauseNote = S.sanitizeStr(patch.note);
+  }
+  p.updatedAt = S.nowIso();
+  persist();
+  return true;
+}
+export function markPause(idx, patch) { return _markPause(current.value, idx, patch); }
+export function markPauseIn(pid, idx, patch) { return _markPause(store.db?.projects.find(x => x.id === pid), idx, patch); }
+
 export function toggleTodo(idx) {
   const t = st()?.todos[idx];
   if (!t) return;
@@ -155,6 +192,24 @@ export function removeTodoIn(pid, idx) {
   if (!p) return;
   p.state.todos.splice(idx, 1);
   persist();
+}
+/* 待办49④：总览页就地编辑——跨项目更新待办（到期/优先级/三属性），同步后联动该项目状态 */
+export function updateTodoIn(pid, idx, patch) {
+  const p = store.db.projects.find(x => x.id === pid);
+  const t = p?.state?.todos?.[idx];
+  if (!t) return false;
+  if (patch.title !== undefined) { const s = S.sanitizeStr(patch.title); if (s) t.title = s; }
+  if (patch.dueRaw !== undefined) { t.due = S.normalizeDue(patch.dueRaw); t.remindedAt = ''; }
+  if (patch.priority !== undefined && S.PRIORITIES.includes(patch.priority)) t.priority = patch.priority;
+  for (const k of ['blocked', 'related', 'next']) {
+    if (patch[k] === undefined) continue;
+    const s = S.sanitizeStr(patch[k]);
+    if (s) t[k] = s; else delete t[k];
+  }
+  if ((p.status === '进行中' || p.status === '等待处理')) p.status = hasBlockedTodo(p) ? '等待处理' : '进行中';
+  p.updatedAt = S.nowIso();
+  persist();
+  return true;
 }
 export function addTodoIn(pid, { title, dueRaw = '', priority = '普通' }) {
   const p = store.db.projects.find(x => x.id === pid);
