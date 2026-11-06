@@ -29,7 +29,7 @@ async function submit() {
     if (!r.ok) {
       status.value = r.message || '整理失败';
       statusKind.value = 'err';
-      window.assistant.setPetState('thinking');
+      window.assistant.setPetState('sad');
       return;
     }
     window.assistant.setPetState('idle');
@@ -47,7 +47,7 @@ async function submit() {
   } catch (e) {
     status.value = '更新失败：' + (e?.message || e);
     statusKind.value = 'err';
-    window.assistant.setPetState('thinking');
+    window.assistant.setPetState('sad');
   } finally {
     busy.value = false;
   }
