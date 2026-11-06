@@ -25,7 +25,6 @@
   .wrap.edge-right { align-items: flex-start; }
   .wrap.edge-bottom { justify-content: flex-start; }
   .wrap.edge-left .kiko, .wrap.edge-right .kiko, .wrap.edge-top .kiko, .wrap.edge-bottom .kiko { animation: none; }
-  .wrap.edge-left .tip, .wrap.edge-right .tip, .wrap.edge-top .tip, .wrap.edge-bottom .tip { display: none; }
   .speech { max-width: 100px; }
   @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
   .speech {
@@ -37,8 +36,6 @@
     transition: all .32s var(--ease);
   }
   .speech.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
-  .tip { margin-top: 4px; font-size: 8.5px; color: rgba(60,60,90,.5); text-shadow: 0 1px 0 rgba(255,255,255,.7); opacity: 0; transition: opacity .3s; text-align: center; white-space: nowrap; }
-  .wrap:hover .tip { opacity: 1; }
   @media (prefers-reduced-motion: reduce) { .kiko { animation: none; } * { transition-duration: .01ms !important; } }
 </style>
 </head>
@@ -46,7 +43,6 @@
   <div class="wrap">
     <div class="speech" id="speech"></div>
     <img class="kiko" id="kiko" src="dist/kiko/idle.png" alt="KIKO" draggable="false" />
-    <div class="tip">拖动移动 · 单击打开 · 双击速记</div>
   </div>
 <script>
   const STATES = { idle: 'idle', working: 'working', done: 'done', thinking: 'thinking', sleeping: 'sleeping', bubble: 'bubble' };

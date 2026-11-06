@@ -1,6 +1,6 @@
 {
   "name": "kiko",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "KIKO · 多项目独立记忆与进度管理的桌面 AI 助手（Electron + Vue 3）",
   "main": "src/main.js",
   "author": "qqchen2",

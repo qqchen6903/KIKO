@@ -73,8 +73,8 @@ const winClose = () => window.assistant.minimize();   /* 关闭=收起进托盘�
    reduced-motion 退静态。令牌：#0071E3 主 / #7C3AED 辅 / #0B1220 文 / #E9F1FF 底。
    ============================================================ */
 :root {
-  --bg: #e9f1ff;
-  --tint-blue: rgba(0, 113, 227, .55); --tint-violet: rgba(124, 58, 237, .42); --tint-cyan: rgba(32, 201, 255, .40);
+  --bg: #f2f6fd;
+  --tint-blue: rgba(0, 113, 227, .14); --tint-violet: rgba(124, 58, 237, .10); --tint-cyan: rgba(32, 201, 255, .10);
   --text: #0b1220; --text-2: #4a5568; --text-3: #7c8aa0;
   --accent: #0071e3; --accent-2: #7c3aed; --accent-press: #0058b0;
   --green: #1d9e5a; --orange: #d9820a; --red: #d7373f; --indigo: #5e5ce6;
@@ -101,7 +101,7 @@ body {
     radial-gradient(58% 46% at 16% 12%, var(--tint-cyan) 0%, transparent 62%),
     radial-gradient(50% 44% at 86% 6%, var(--tint-violet) 0%, transparent 60%),
     radial-gradient(64% 52% at 70% 96%, var(--tint-blue) 0%, transparent 58%),
-    linear-gradient(160deg, #eef4ff 0%, #e4ecfb 46%, #dde7f9 100%);
+    linear-gradient(160deg, #f5f8fe 0%, #eef3fb 46%, #e8eef8 100%);
   background-attachment: fixed;
 }
 ::selection { background: rgba(0, 113, 227, .18); }
@@ -193,6 +193,8 @@ html.no-glass .log .body { background: rgba(255, 255, 255, .8) !important; }
   padding: 26px; width: min(520px, 100%); max-height: 86vh; overflow: auto;
 }
 .dialog.wide { width: min(740px, 100%); }
+/* 待办33：滚动条轨道随内容内缩，不再越过弹窗圆角上下边界（其他滚动区检查过：侧栏列表/主区均有大 padding，无越界） */
+.dialog::-webkit-scrollbar-track { margin: 26px 0; border-radius: 99px; }
 .dialog h2 { font-size: 17px; margin: 0 0 18px; letter-spacing: -.015em; }
 .dialogfoot { display: flex; justify-content: flex-end; gap: 9px; margin-top: 24px; }
 
