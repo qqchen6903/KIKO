@@ -55,6 +55,18 @@ test('待办39：三属性 frontmatter 往返无损，正文渲染子行且旧�
   assert.strictEqual(t.next, '先写mock');
 });
 
+test('待办44：待定池 md 正文渲染与 frontmatter 往返', () => {
+  const p = sampleDb().projects[0];
+  p.state.pending = S.normPending([{ text: '下月末部署暂定', waiting: '客户确认时间', followUp: '2026-11-30 10:00', source: '时间暂定', state: 'discarded' }]);
+  const md = store.projectToMd(p);
+  assert.ok(md.includes('## 待定池'), '正文含待定池小节');
+  assert.ok(md.includes('[~] 下月末部署暂定'), '作废项渲染删除标记');
+  assert.ok(md.includes('在等：客户确认时间') && md.includes('来源："时间暂定"'));
+  const back = store.mdToProject(md);
+  assert.strictEqual(back.state.pending[0].state, 'discarded');
+  assert.match(back.state.pending[0].followUp, /^2026-11-30/);
+});
+
 test('load/saveWorkspace：写盘回读一致，改名清旧文件，删除项目清孤儿', () => {
   const root = tmpRoot();
   const db = sampleDb();

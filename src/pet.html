@@ -10,8 +10,7 @@
   .wrap { position: relative; width: 128px; height: 104px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
   .kiko {
     width: 56px; height: 56px; border-radius: 50%; object-fit: cover; object-position: center 32%;
-    border: 2.5px solid rgba(255,255,255,.92); background: #dfe6f5;
-    box-shadow: 0 4px 12px rgba(30,40,90,.25); cursor: grab;
+    border: 2.5px solid rgba(255,255,255,.92); background: #dfe6f5; cursor: grab; /* 待办40：去除圆形外围阴影 */
     animation: float 3.2s var(--ease) infinite;
   }
   .kiko:active { cursor: grabbing; }

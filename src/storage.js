@@ -59,6 +59,14 @@ function projectToMd(p) {
     st.summary ? `> ${st.summary}` : '> （尚无概况，向 KIKO 描述你的工作进展吧）', '',
     p.goal ? `**目标**：${p.goal}` : '', '',
     `## 待办\n\n${(st.todos || []).map(todoLine).join('\n') || '（无）'}\n`,
+    /* 待办44：待定池可读副本 */
+    (() => {
+      const list = st.pending || [];
+      if (!list.length) return '';
+      const pl = x => `- ${x.state === 'discarded' ? '[~] ' : '[ ] '}${x.text}`
+        + `${x.followUp ? `（跟进 ${x.followUp}）` : ''}${x.waiting ? ` ｜ 在等：${x.waiting}` : ''}${x.source ? ` ｜ 来源："${x.source}"` : ''}`;
+      return `## 待定池\n\n${list.map(pl).join('\n')}\n`;
+    })(),
     `## 关键决策\n\n${(st.decisions || []).map(decLine).join('\n') || '（无）'}\n`,
     `## 历史时间线\n\n${(p.logs || []).map(logBlock).join('\n') || '（无）'}`,
   ].filter(line => line !== undefined).join('\n') + '\n';

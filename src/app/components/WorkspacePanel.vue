@@ -6,6 +6,7 @@ import S from '../shared-bridge';
 import AppIcon from './AppIcon.vue';
 import SummaryCard from './cards/SummaryCard.vue';
 import TodoCard from './cards/TodoCard.vue';
+import PendingCard from './cards/PendingCard.vue';
 import DecisionCard from './cards/DecisionCard.vue';
 import HistoryTimeline from './HistoryTimeline.vue';
 import WorkComposer from './WorkComposer.vue';
@@ -57,6 +58,7 @@ function editProject() {
       <div class="grid">
         <SummaryCard class="span2" />
         <TodoCard class="span2" />
+        <PendingCard class="span2" />
         <DecisionCard class="span2" />
       </div>
 

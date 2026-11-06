@@ -203,6 +203,44 @@ test('edgeSnap：多屏负坐标 workArea（副屏在主屏左侧）', () => {
   assert.strictEqual(r.hidden.x, -1920 - 104);
 });
 
+test('待办44：validateAiResult pending 池规整——非法类型忽略、无正文丢弃、字段归一', () => {
+  const r = S.validateAiResult({ pending: 'x' });
+  assert.strictEqual(r.ok, false, 'pending 非法且全空应拒绝');
+  const r2 = S.validateAiResult({ pending: ['纯文本待定', { text: '等客户确认排期', waiting: '客户张三', followUp: '明天 09:00', source: '先这样吧' }, { waiting: '没有正文' }] });
+  assert.strictEqual(r2.ok, true);
+  assert.strictEqual(r2.value.pending.length, 2, '无正文条目丢弃');
+  assert.strictEqual(r2.value.pending[0].text, '纯文本待定');
+  assert.strictEqual(r2.value.pending[1].waiting, '客户张三');
+  assert.match(r2.value.pending[1].followUp, /^2\d{3}-/);
+  assert.strictEqual(r2.value.pending[1].state, 'open');
+});
+
+test('待办44：mergeState 待定池只增不删，作废状态 AI 无权改，改跟进日期清提醒', () => {
+  const old = { pending: [
+    { text: '老待定', waiting: '旧说法', state: 'discarded', createdAt: '', remindedAt: 'r' },
+    { text: '跟进项', followUp: '2026-12-01T10:00:00.000Z', remindedAt: 'r1' },
+  ], todos: [], decisions: [] };
+  const ai = S.validateAiResult({ summary: 's', pending: [
+    { text: '老待定', waiting: '新说法', state: 'open' },
+    { text: '跟进项', followUp: '2026-12-05 10:00' },
+    { text: '新增待定' },
+  ] }).value;
+  const { newState } = S.mergeState(old, ai);
+  const a = newState.pending.find(x => x.text === '老待定'), b = newState.pending.find(x => x.text === '跟进项');
+  assert.strictEqual(a.state, 'discarded', '作废状态由用户决定，AI 传入 open 也不覆盖');
+  assert.strictEqual(a.waiting, '新说法', '非空字段可更新');
+  assert.match(b.followUp, /^2026-12-05/);
+  assert.strictEqual(b.remindedAt, '', '跟进日期变化后清提醒标记，可再次提醒');
+  assert.ok(newState.pending.some(x => x.text === '新增待定'));
+});
+
+test('待办44：diffState 输出 pendingAdded；migrate 自动补齐待定池字段', () => {
+  const d = S.diffState({ pending: [{ text: '旧' }] }, { pending: [{ text: '旧' }, { text: '新池项' }] });
+  assert.deepStrictEqual(d.pendingAdded, ['新池项']);
+  const db = S.migrate({ version: 1, projects: [{ id: 'a', name: 'n', state: { todos: [] }, logs: [] }], activeProjectId: 'a' });
+  assert.deepStrictEqual(db.projects[0].state.pending, [], '旧存档缺 pending 键时补空数组');
+});
+
 test('fmtShort/fmtLong：ISO 与旧版中文时间串均可展示', () => {
   assert.match(S.fmtShort('2026-11-05T09:08:00.000Z'), /\d{2}-\d{2} \d{2}:\d{2}/);
   assert.strictEqual(S.fmtShort(''), '');

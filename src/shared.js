@@ -67,13 +67,27 @@ function validateAiResult(raw) {
     for (const k of ['blocked', 'related', 'next']) if (t && typeof t === 'object' && t[k] !== undefined) todo[k] = sanitizeStr(t[k]);
     todos.push(todo);
   }
+  const pendingSrc = raw.pending === undefined ? [] : (Array.isArray(raw.pending) ? raw.pending : (errors.push('字段 pending 格式非法，已忽略。'), []));
+  const pending = [];
+  for (const x of pendingSrc) {
+    const text = sanitizeStr(x && typeof x === 'object' ? x.text : x);
+    if (!text) continue;
+    const item = { text, waiting: '', followUp: '', source: '', state: 'open' };
+    if (x && typeof x === 'object') {
+      item.waiting = sanitizeStr(x.waiting);
+      item.followUp = normalizeDue(x.followUp);
+      item.source = sanitizeStr(x.source);
+    }
+    pending.push(item);
+  }
   const value = {
     summary: sanitizeStr(raw.summary),
     decisions: arr('decisions'),
     conflicts: arr('conflicts'),
     todos: todos.slice(0, MAX_ITEMS),
+    pending: pending.slice(0, MAX_ITEMS),
   };
-  const usable = value.summary || value.decisions.length || value.conflicts.length || value.todos.length;
+  const usable = value.summary || value.decisions.length || value.conflicts.length || value.todos.length || value.pending.length;
   if (!usable) return { ok: false, value: null, errors: errors.concat(['模型返回内容为空或全部无法解析，本次结果已丢弃，原数据未改动。']) };
   return { ok: true, value, errors };
 }
@@ -108,6 +122,23 @@ function normTodos(v) {
 
 function tkey(s) { return String(s || '').toLowerCase(); }
 
+/* ---------- 待办44：待定池（暂定/待确认需求） ---------- */
+function normPending(v) {
+  const out = [];
+  if (!Array.isArray(v)) return out;
+  for (const x of v) {
+    if (!x || typeof x !== 'object') continue;
+    const text = sanitizeStr(x.text);
+    if (!text) continue;
+    out.push({
+      text, waiting: sanitizeStr(x.waiting), followUp: normalizeDue(x.followUp), source: sanitizeStr(x.source),
+      state: x.state === 'discarded' ? 'discarded' : 'open',
+      createdAt: sanitizeStr(x.createdAt), remindedAt: sanitizeStr(x.remindedAt),
+    });
+  }
+  return out.slice(0, MAX_ITEMS);
+}
+
 /* 待办39 合并策略：决策“只追加”；待办按标题匹配，done 只进不退，
  * blocked/related/next 三属性由 AI 管理生命周期（AI 明确给出该键才更新，空串=清除）。
  * 旧格式四个列表（completed/inProgress/blockers/nextSteps）不再写入新内容，但原样保留不清除——
@@ -137,9 +168,24 @@ function mergeState(oldState, ai) {
       byTitle.set(tkey(nt.title), nt); oldTodos.push(nt);
     }
   }
+  /* 待办44：待定池按 text 匹配，AI 给出的非空字段才更新；只增不删（作废是用户动作，AI 无权改 state） */
+  const oldPending = normPending(os.pending);
+  const pBy = new Map(oldPending.map(x => [tkey(x.text), x]));
+  for (const x of ai.pending || []) {
+    const ex = pBy.get(tkey(x.text));
+    if (ex) {
+      if (x.waiting) ex.waiting = x.waiting;
+      if (x.followUp && x.followUp !== ex.followUp) { ex.followUp = x.followUp; ex.remindedAt = ''; }
+      if (x.source) ex.source = x.source;
+    } else {
+      const np = normPending([x])[0]; np.createdAt = nowIso(); np.state = 'open'; np.remindedAt = '';
+      pBy.set(tkey(np.text), np); oldPending.push(np);
+    }
+  }
   const newState = {
     summary: ai.summary || os.summary || '',
     todos: oldTodos.slice(-MAX_ITEMS),
+    pending: oldPending.slice(-MAX_ITEMS),
     decisions: oldDecisions.slice(-MAX_ITEMS),
     constraints: Array.isArray(os.constraints) ? os.constraints : [],
   };
@@ -165,10 +211,13 @@ function diffState(oldState, newState) {
       if (a !== b) attrsChanged.push({ title: nt.title, field: k, from: a, to: b });
     }
   }
+  const opa = normPending(o.pending), npd = normPending(n.pending);
+  const opt = new Set(opa.map(x => tkey(x.text)));
   return {
     summaryChanged: (n.summary || '') !== (o.summary || ''),
     decisionsAdded: nd.filter(d => !odt.has(d.text)).map(d => d.text),
     todosAdded, todosDone, attrsChanged,
+    pendingAdded: npd.filter(x => !opt.has(tkey(x.text))).map(x => x.text),
   };
 }
 
@@ -193,6 +242,7 @@ function migrate(db) {
       if (a && a.length) st[k] = a; else delete st[k];
     }
     st.todos = normTodos(st.todos);
+    st.pending = normPending(st.pending);   /* 待办44：旧数据自动补齐待定池字段 */
     st.decisions = normDecisions(st.decisions);
     st.constraints = Array.isArray(st.constraints) ? st.constraints.map(sanitizeStr).filter(Boolean) : [];
     st.summary = sanitizeStr(st.summary);
@@ -309,7 +359,7 @@ function parseChatContent(type, parsed) {
 
 const Shared = {
   MAX_ITEMS, MAX_LEN, MAX_LOGS, PRIORITIES, PROTOCOLS,
-  nowIso, sanitizeStr, strArray, normalizeDue, validateAiResult, normDecisions, normTodos,
+  nowIso, sanitizeStr, strArray, normalizeDue, validateAiResult, normDecisions, normTodos, normPending,
   mergeState, diffState, migrate, validateWorkspaceFile, fmtShort, fmtLong, daysSince, dueLabel, DEFAULTS,
   buildChatRequest, parseChatContent, edgeSnap,
 };

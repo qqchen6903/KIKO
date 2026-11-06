@@ -5,6 +5,15 @@ import { current, addTodo, updateTodo, toggleTodo, removeTodo } from '../../stor
 import AppIcon from '../AppIcon.vue';
 
 const todos = computed(() => current.value?.state.todos ?? []);
+/* 待办41：未完成为主列表；已完成近一周收进可展开区，每条带完成时间 */
+const undone = computed(() => todos.value.map((t, i) => ({ t, i })).filter(x => !x.t.done));
+const weekDone = computed(() => {
+  const cut = Date.now() - 7 * 864e5;
+  return todos.value.map((t, i) => ({ t, i }))
+    .filter(x => x.t.done && (!x.t.doneAt || Date.parse(x.t.doneAt) >= cut))
+    .sort((a, b) => (Date.parse(b.t.doneAt) || 0) - (Date.parse(a.t.doneAt) || 0));
+});
+const showDone = ref(false);
 const adding = ref(false);
 const nTitle = ref('');
 const nDue = ref('');
@@ -57,7 +66,7 @@ function submitEdit() {
     </div>
 
     <TransitionGroup name="rows" tag="div" class="list">
-      <div v-for="(t, i) in todos" :key="t.title + i" class="trow" :class="{ done: t.done }">
+      <div v-for="{ t, i } in undone" :key="t.title + i" class="trow">
         <template v-if="editIdx === i">
           <span class="editform">
             <input class="fte" v-model="eTitle" placeholder="任务" />
@@ -91,6 +100,23 @@ function submitEdit() {
         </template>
       </div>
     </TransitionGroup>
+    <div class="weekwrap" v-if="weekDone.length">
+      <button class="weekbtn" @click="showDone = !showDone">
+        <AppIcon name="chevron-down" :size="11" class="chev" :class="{ open: showDone }" />
+        最近一周的工作（{{ weekDone.length }}）
+      </button>
+      <TransitionGroup name="rows" tag="div" class="list" v-if="showDone">
+        <div v-for="{ t, i } in weekDone" :key="'w' + t.title + i" class="trow done">
+          <input type="checkbox" class="chk" checked title="取消勾选可重新打开" @change="toggleTodo(i)" />
+          <div class="tbody">
+            <div class="tline">
+              <span class="title">{{ t.title }}</span>
+              <span class="ftime">{{ t.doneAt ? '完成于 ' + S.fmtShort(t.doneAt) : '已完成' }}</span>
+            </div>
+          </div>
+        </div>
+      </TransitionGroup>
+    </div>
     <p v-if="!todos.length && !adding" class="empty">暂无待办。让 AI 整理时说出「明天下午前完成××」，确认后会自动进入这里。</p>
 
     <div class="addrow" v-if="adding">
@@ -159,6 +185,13 @@ h3 { font-size: 13px; margin: 0; color: var(--text-2); font-weight: 600; display
 .addrow select, .pri { border: 1px solid rgba(11, 18, 32, .12); border-radius: 10px; padding: 6px 9px; font-size: 12.5px; outline: none; background: rgba(255, 255, 255, .62); }
 .addrow input:focus, .addrow select:focus { background: rgba(255, 255, 255, .88); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0, 113, 227, .14); }
 .empty { color: var(--text-3); font-size: 12.5px; margin: 4px 0; line-height: 1.6; }
+/* 待办41：近一周已完成展开区 */
+.weekwrap { margin-top: 8px; }
+.weekbtn { border: 0; background: rgba(11, 18, 32, .045); color: var(--text-2); font-size: 11.5px; font-family: inherit; border-radius: 8px; padding: 4px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; transition: background .16s var(--ease); }
+.weekbtn:hover { background: rgba(11, 18, 32, .08); }
+.chev { transition: transform .2s var(--ease); }
+.chev.open { transform: rotate(180deg); }
+.ftime { font-size: 11px; color: var(--text-3); flex-shrink: 0; }
 .rows-enter-active { transition: all .24s var(--ease); }
 .rows-leave-active { transition: all .16s ease-in; }
 .rows-enter-from { opacity: 0; transform: translateY(5px); }

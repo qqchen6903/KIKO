@@ -251,14 +251,21 @@ function checkReminders() {
     if (data.settings.remindersOn === false) return;
     const now = Date.now();
     const due = [];
+    const pendDue = [];
     for (const p of data.projects) {
       for (const t of (p.state && p.state.todos) || []) {
         if (t.done || !t.due || t.remindedAt) continue;
         const ts = Date.parse(t.due);
         if (!isNaN(ts) && ts <= now && now - ts < 6 * 3600e3) due.push({ p, t });
       }
+      /* 待办44：跟进日期到了还没确认的待定事项，提醒一次（修改跟进日期后 remindedAt 清空可再提醒） */
+      for (const x of (p.state && p.state.pending) || []) {
+        if (x.state !== 'open' || !x.followUp || x.remindedAt) continue;
+        const ts = Date.parse(x.followUp);
+        if (!isNaN(ts) && ts <= now && now - ts < 6 * 3600e3) pendDue.push({ p, x });
+      }
     }
-    if (!due.length) return;
+    if (!due.length && !pendDue.length) return;
     queueWrite(() => {
       const d = readData();
       const touched = new Map();
@@ -270,6 +277,14 @@ function checkReminders() {
           }
         }
       }
+      for (const { p, x } of pendDue) {
+        for (const pp of d.projects) {
+          if (pp.id !== p.id) continue;
+          for (const xx of (pp.state && pp.state.pending) || []) {
+            if (xx.text === x.text && xx.followUp === x.followUp && xx.state === 'open' && !xx.remindedAt) { xx.remindedAt = Shared.nowIso(); touched.set(pp.id, pp); }
+          }
+        }
+      }
       for (const pp of touched.values()) Storage.touchProject(dataRoot, pp);
     }).then(() => {
       for (const { p, t } of due) {
@@ -277,6 +292,12 @@ function checkReminders() {
         n.on('click', showWin);
         n.show();
         sayOnPet(`「${t.title}」到期啦～`);
+      }
+      for (const { p, x } of pendDue) {
+        const n = new Notification({ title: 'KIKO · 待确认提醒', body: `【${p.name}】待定「${x.text}」跟进时间到了${x.waiting ? `，还在等：${x.waiting}` : ''}` });
+        n.on('click', showWin);
+        n.show();
+        sayOnPet(`待定「${x.text}」该跟进确认啦～`);
       }
     });
   } catch {}
@@ -462,13 +483,14 @@ ipcMain.handle('ai:update', async (_e, payload) => {
   if (!project || !project.id) return { ok: false, message: '项目数据无效，请刷新后重试。' };
   const prompt = [
     '你是一个严谨的项目工作记忆助手。根据用户新输入，更新项目结构化记录。只返回 JSON，不要 Markdown。',
-    'JSON 格式：{"summary":"一句话当前概况","todos":[{"title":"...","due":"YYYY-MM-DD HH:mm 或今天/明天 18:00 之类，没有就留空","priority":"高/普通/低","done":false,"blocked":"当前阻塞点，没有就空字符串","related":"关联信息（链接/文件/人/事项），没有就空字符串","next":"下一步动作，没有就空字符串"}],"decisions":["新的关键决策"],"conflicts":["新旧信息冲突点"]}',
+    'JSON 格式：{"summary":"一句话当前概况","todos":[{"title":"...","due":"YYYY-MM-DD HH:mm 或今天/明天 18:00 之类，没有就留空","priority":"高/普通/低","done":false,"blocked":"当前阻塞点，没有就空字符串","related":"关联信息（链接/文件/人/事项），没有就空字符串","next":"下一步动作，没有就空字符串"}],"pending":[{"text":"待定事项内容","waiting":"在等谁确认什么","followUp":"YYYY-MM-DD 跟进日期，没有就留空","source":"用户原话摘录"}],"decisions":["新的关键决策"],"conflicts":["新旧信息冲突点"]}',
     '规则：',
     '1. todos 返回全量清单：保留旧待办（含 blocked/related/next 原值），仅按新输入更新确有变化的条目；decisions 只能追加，绝不删除或改写旧条目。',
     '2. blocked/related/next 是每条待办的属性，反映其真实状态：阻塞解决后把该条 blocked 置为空字符串；完成可 done=true。',
     '3. 新信息与旧信息冲突时不要擅自覆盖，把冲突写进 conflicts，由用户确认。',
     '4. 从输入中提取带时间的承诺写入 todos；没有把握的日期一律留空，不要编造。',
     '5. 不要输出 completed / inProgress / blockers / nextSteps 字段（旧格式已废弃）。',
+    '6. 待办44：识别「暂定/待定/待确认/等对方回复/时间还没定」这类未定需求，写入 pending（source 摘录用户原话），不要放进 todos；pending 同样只追加、按 text 更新已有条目，不要删除用户池内条目。',
     `当前项目：${project.name}（目标：${project.goal || '未填写'}）`,
     `旧记录：${JSON.stringify(project.state || {})}`,
     `最近历史：${JSON.stringify((project.logs || []).slice(-8).map(l => ({ at: l.at, message: l.message })))}`,

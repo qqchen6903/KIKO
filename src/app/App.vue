@@ -105,6 +105,8 @@ body {
   background-attachment: fixed;
 }
 ::selection { background: rgba(0, 113, 227, .18); }
+/* 待办43：placeholder 统一更浅 */
+input::placeholder, textarea::placeholder { color: #b6c1d4; opacity: 1; }
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-thumb { background: rgba(120, 140, 175, .38); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background-color: rgba(100, 120, 160, .55); }
@@ -139,20 +141,20 @@ body {
   font-family: inherit;
 }
 .btn { position: relative; overflow: hidden; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-.btn::after { /* 顶缘薄光：克制，不做成实体键 */
+.btn::after { /* 待办42：顶缘薄光再减半，贴平 UI */
   content: ""; position: absolute; inset: 0 0 auto 0; height: 50%;
-  background: linear-gradient(180deg, rgba(255,255,255,.10), transparent); pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.04), transparent); pointer-events: none;
 }
 .btn:hover { background: var(--glass-strong); filter: brightness(1.02); transform: translateY(-1.5px); box-shadow: var(--edge-hi), 0 7px 18px rgba(14, 38, 86, .14); }
 .btn:active { transform: scale(.93); filter: brightness(.97); }
 .btn:disabled { opacity: .42; cursor: default; transform: none; filter: none; }
 .btn:focus-visible { outline: none; box-shadow: var(--edge-hi), 0 0 0 3px rgba(0, 113, 227, .38), 0 0 0 5px rgba(124, 58, 237, .18); }
 .btn.primary {
-  background: linear-gradient(180deg, #2b8ef7 0%, var(--accent) 100%);
-  border-color: rgba(255, 255, 255, .32); color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 4px 14px rgba(0, 113, 227, .35);
+  background: linear-gradient(180deg, #1a82ef 0%, var(--accent) 100%);
+  border-color: rgba(255, 255, 255, .22); color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 4px 14px rgba(0, 113, 227, .3);
 }
-.btn.primary::after { background: linear-gradient(180deg, rgba(255,255,255,.16), transparent); }
+.btn.primary::after { background: linear-gradient(180deg, rgba(255,255,255,.07), transparent); }
 .btn.primary:hover { background: linear-gradient(180deg, #3d9bff 0%, #0a7aeb 100%); }
 .btn.primary:active { background: var(--accent-press); }
 .btn.danger { color: var(--red); }

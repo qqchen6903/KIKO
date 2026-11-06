@@ -61,7 +61,7 @@ export function createProject({ name, goal }) {
   const p = {
     id: crypto.randomUUID(), name, goal: goal || '', status: '进行中',
     createdAt: S.nowIso(), updatedAt: S.nowIso(), lastWorkedAt: S.nowIso(),
-    state: { summary: '', todos: [], decisions: [], constraints: [] },
+    state: { summary: '', todos: [], pending: [], decisions: [], constraints: [] },
     logs: [],
   };
   store.db.projects.unshift(p);
@@ -172,6 +172,47 @@ function touchWorked() {
   if (!p) return;
   p.updatedAt = S.nowIso();
   p.lastWorkedAt = S.nowIso();
+}
+
+/* ---------- 待定池（待办44） ---------- */
+export function addPending({ text, waiting = '', followUpRaw = '', source = '' }) {
+  const s = S.sanitizeStr(text);
+  if (!s || !st()) return false;
+  if (st().pending.some(x => x.text === s)) { toast('待定池里已有相同内容', 'warn'); return false; }
+  st().pending.push({ text: s, waiting: S.sanitizeStr(waiting), followUp: S.normalizeDue(followUpRaw), source: S.sanitizeStr(source), state: 'open', createdAt: S.nowIso(), remindedAt: '' });
+  touchWorked();
+  persist();
+  return true;
+}
+export function updatePending(idx, patch) {
+  const x = st()?.pending?.[idx];
+  if (!x) return;
+  if (patch.text !== undefined) { const s = S.sanitizeStr(patch.text); if (s) x.text = s; }
+  if (patch.waiting !== undefined) x.waiting = S.sanitizeStr(patch.waiting);
+  if (patch.source !== undefined) x.source = S.sanitizeStr(patch.source);
+  if (patch.followUpRaw !== undefined) { const f = S.normalizeDue(patch.followUpRaw); if (f !== x.followUp) { x.followUp = f; x.remindedAt = ''; } }
+  persist();
+}
+export function removePending(idx) { st()?.pending?.splice(idx, 1); persist(); }
+export function togglePendingDiscard(idx) {
+  const x = st()?.pending?.[idx];
+  if (!x) return;
+  x.state = x.state === 'discarded' ? 'open' : 'discarded';
+  persist();
+}
+/* 转正：弹一次编辑补截止日期和优先级 → 转为正式待办并从池中移除，历史时间线留系统痕迹 */
+export function promotePending(idx, { dueRaw = '', priority = '普通' }) {
+  const p = current.value;
+  const x = p?.state?.pending?.[idx];
+  if (!x) return false;
+  p.state.pending.splice(idx, 1);
+  const todo = { title: x.text, due: S.normalizeDue(dueRaw), priority: S.PRIORITIES.includes(priority) ? priority : '普通', done: false, createdAt: S.nowIso(), remindedAt: '', doneAt: '' };
+  if (x.waiting) todo.related = `曾在等：${x.waiting}`;
+  p.state.todos.push(todo);
+  p.logs.push({ at: S.nowIso(), system: true, message: `待定转正：「${x.text}」转为正式待办${x.followUp ? `（原跟进 ${S.fmtShort(x.followUp)}）` : ''}` });
+  touchWorked();
+  persist();
+  return true;
 }
 
 /* 待办39：有阻塞点的未完成待办出现/清空时联动项目状态；用户手动设置的「已完成/已暂停」不被覆盖 */

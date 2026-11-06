@@ -9,6 +9,22 @@
 - 补齐 `LICENSE`（MIT，与 package.json 声明一致）；package.json `author` 改为 `qqchen2`；README 增补 git clone 说明与完整工程结构图。
 - 初始化 git 仓库（分支 `main`）并推送至 `https://github.com/qqchen6903/KIKO`。
 
+## v1.12.0（2026-11-06）
+
+### 待办 40–44
+
+- 待办40：桌宠圆形形象外围投影（box-shadow）移除，白圈描边保留，贴纸更干净。
+- 待办41：待办列表拆分——未完成为主列表；已完成收进「最近一周的工作（N）」展开区（默认折叠，chevron 旋转），每条显示 `完成于 MM-DD HH:mm`（doneAt 全链路已有：勾选/撤销/AI 完成均写入）。
+- 待办42：按钮顶光再减半——`.btn::after` .10→.04、`.btn.primary::after` .16→.07、primary 底色渐变收敛（#2b8ef7→#1a82ef）、inset 高光 .3→.12，设置/保存/AI整理并更新等按钮贴合整体平面玻璃风。
+- 待办43：全局 `input::placeholder` 统一降浅为 `#b6c1d4`。
+- **待办44 · 待定池**（功能级新增）：
+  - 数据模型 `state.pending[]`：`text/waiting/followUp(ISO)/source/state(open|discarded)/remindedAt`；`migrate` 为旧存档自动补 `pending:[]`；md 正文新增「## 待定池」小节（作废项 `[~]` 标记）。
+  - AI 整理：schema 新增 `pending`；识别「暂定/待确认/等对方回复」输入写入待定池（source 摘录原话）而非待办；合并按 text 匹配、只增不删、作废状态 AI 无权改、跟进日期变更自动清 remindedAt。
+  - 项目页新卡片 PendingCard：添加/编辑（内容+在等+跟进日期+来源原话）；**转正**（内联补截止日期+优先级→转正式待办、`曾在等`进待办 related、历史时间线留系统痕迹）；**作废**置灰留档可恢复；删除。
+  - 提醒闭环：跟进时间到 → Windows 系统通知（KIKO·待确认提醒）+ 桌宠说话 + 待办总览新增「待确认」分区（列出所有过期未确认项，可跳转项目）；改跟进日期可再次提醒；与待办到期提醒同一 queueWrite 落盘防竞态。
+- 过程修复：冒烟首块因 41 的“完成即移出主列表”而永久挂起（Promise 从不 resolve），判据改为“不在未完成区”；ui-smoke 新增 `live()` 实时日志定位挂点（test/_smoke_live.txt，已 gitignore）。
+- 验证：单测 **27/27**（validate/merge/diff/migrate 待定池 4 组新用例 + storage 待定池往返）、UI 冒烟 **39/39**（待定添加→在等文案→作废置灰→转正转办+系统痕迹→总览待确认分区→磁盘四项断言；退出码 0）；`KIKO Setup 1.12.0.exe`。
+
 ## v1.11.0（2026-11-06）
 
 ### 待办数据模型重构（待办39）+ 左右独立滚动修复（待办38）

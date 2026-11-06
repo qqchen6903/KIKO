@@ -36,6 +36,17 @@ const recentDone = computed(() => {
 });
 const isOver = t => t.due && Date.parse(t.due) < Date.now();
 
+/* 待办44：待确认分区——待定池中跟进日期已过、仍未确认的条目 */
+const pendNeed = computed(() => {
+  const out = [];
+  for (const p of store.db?.projects || []) {
+    (p.state?.pending || []).forEach((x, i) => {
+      if (x.state === 'open' && x.followUp && Date.parse(x.followUp) < Date.now()) out.push({ pid: p.id, pname: p.name, i, x });
+    });
+  }
+  return out.sort((a, b) => Date.parse(a.x.followUp) - Date.parse(b.x.followUp));
+});
+
 /* 快速新增：到期用原生日期+时间选择器（待办19） */
 const nPid = ref('');
 const nTitle = ref('');
@@ -86,7 +97,22 @@ function goto(pid) { selectProject(pid); }
       </TransitionGroup>
     </section>
 
-    <section class="card celebrate" v-else>
+    <section class="card pend-card" v-if="pendNeed.length">
+      <div class="cardhead"><h3><AppIcon name="target" :size="14" /> 待确认 <span class="sub2">待定池跟进时间已到、还没确认的事项</span></h3></div>
+      <div v-for="r in pendNeed" :key="'p' + r.pid + r.i" class="trow">
+        <span class="pdot"></span>
+        <div class="grow">
+          <div class="title">{{ r.x.text }}</div>
+          <div class="sub">
+            <button class="pj" @click="goto(r.pid)">{{ r.pname }} ↗</button>
+            <span class="due over">该跟进 · {{ S.dueLabel(r.x.followUp) }}</span>
+            <span class="pw" v-if="r.x.waiting">在等：{{ r.x.waiting }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card celebrate" v-if="!rows.length">
       <div class="celeb-inner">
         <img class="kiko-img" :src="'kiko/' + (store.db?.projects?.length ? 'done.png' : 'mascot.png')" alt="KIKO" />
         <p>{{ store.db?.projects?.length ? '待办全部完成，KIKO 替你开心！' : '还没有待办。在项目里让 KIKO 整理进展，或在下方快速记一条。' }}</p>
@@ -149,6 +175,11 @@ function goto(pid) { selectProject(pid); }
 .tag.hi { background: rgba(255,214,210,.65); color: #b02a31; }
 .tag.lo { background: rgba(228,232,241,.7); color: var(--text-2); }
 .tag.blocked { background: rgba(255,214,210,.8); color: #b02a31; font-weight: 600; }
+/* 待办44：待确认分区 */
+.pend-card h3 { display: flex; align-items: center; gap: 6px; }
+.sub2 { font-size: 11px; color: var(--text-3); font-weight: 400; }
+.pdot { width: 8px; height: 8px; border-radius: 50%; background: var(--orange); flex-shrink: 0; box-shadow: inset 0 -1px 1px rgba(0,0,0,.12), inset 0 1px 1px rgba(255,255,255,.7); }
+.pw { font-size: 11px; color: #1c5aa8; }
 .next { font-size: 11px; color: #1c5aa8; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chk { appearance: none; -webkit-appearance: none; width: 19px; height: 19px; border-radius: 50%; margin: 0; flex-shrink: 0; cursor: pointer; border: 1.5px solid rgba(11,18,32,.22); background: rgba(255,255,255,.75); box-shadow: inset 0 1px 2px rgba(14,38,86,.08); transition: all .22s var(--spring); }
 .chk:hover { border-color: rgba(29,158,90,.6); background: #fff; }

@@ -17,10 +17,14 @@ require('../src/main.js'); // 真实主进程入口：注册全部 ipcMain.handl
 
 const results = [];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-function ok(name, cond, detail) { results.push({ name, pass: !!cond, detail: detail || '' }); console.log(`${cond ? 'PASS' : 'FAIL'} ${name}${cond ? '' : (detail ? ' — ' + detail : '')}`); }
+const LIVE = path.join(__dirname, '_smoke_live.txt');
+fs.writeFileSync(LIVE, '');
+function live(s) { try { fs.appendFileSync(LIVE, s + '\n'); } catch {} }
+function ok(name, cond, detail) { results.push({ name, pass: !!cond, detail: detail || '' }); const line = `${cond ? 'PASS' : 'FAIL'} ${name}${cond ? '' : (detail ? ' — ' + detail : '')}`; console.log(line); live(line); }
 async function evalJs(win, code) {
-  try { return await win.webContents.executeJavaScript(`(async()=>{${code}})()`); }
-  catch (e) { return { __error: String(e) }; }
+  live('EVAL> ' + String(code).replace(/\s+/g, ' ').slice(0, 110));
+  try { const r = await win.webContents.executeJavaScript(`(async()=>{${code}})()`); live('EVAL OK <- ' + String(JSON.stringify(r) || '').slice(0, 80)); return r; }
+  catch (e) { live('EVAL ERR ' + String(e).slice(0, 120)); return { __error: String(e) }; }
 }
 
 (async () => {
@@ -110,8 +114,9 @@ async function evalJs(win, code) {
           const dueShown = !!row.querySelector('.due');
           row.querySelector('.chk').click();
           setTimeout(() => {
-            row = [...card.querySelectorAll('.trow')].find(r => r.textContent.includes('冒烟：一条待办'));
-            res({ found: true, dueShown, doneClass: row.className.includes('done') });
+            /* 待办41：完成后条目从未完成列表消失（收进折叠的“最近一周”区），以“不在未完成区”为完成态判据 */
+            const stillUndone = [...card.querySelectorAll('.trow')].some(r => !r.className.includes('done') && r.textContent.includes('冒烟：一条待办'));
+            res({ found: true, dueShown, doneClass: !stillUndone });
           }, 350);
         }, 500); }, 100);
     }, 200));
@@ -161,6 +166,86 @@ async function evalJs(win, code) {
   const statusWait = await evalJs(win, `return [...document.querySelectorAll('.pmeta span')].some(x => x.textContent.includes('等待处理'))`);
   ok('带阻塞点的未完成待办联动项目状态为「等待处理」', !!statusWait);
 
+  // 待办41：已完成待办收进「最近一周」展开区，带完成时间
+  const weekOk = await evalJs(win, `
+    const card = ${cardFinder("'待办事项'")};
+    const btn = card.querySelector('.weekbtn');
+    if (!btn || !btn.textContent.includes('1')) return { btn: false };
+    btn.click();
+    return new Promise(res => setTimeout(() => {
+      const doneRow = [...card.querySelectorAll('.trow.done')].find(r => r.textContent.includes('冒烟：一条待办'));
+      res({ btn: true, expanded: !!doneRow, time: doneRow ? (doneRow.querySelector('.ftime')?.textContent || '') : '' });
+    }, 350));
+  `);
+  ok('最近一周完成项可展开且显示完成时间', !!(weekOk.btn && weekOk.expanded && weekOk.time.includes('完成于')), JSON.stringify(weekOk));
+
+  // 待办44：待定池——添加、转正（补日期→变待办+系统痕迹）、过期项进总览待确认、作废置灰
+  const ystr = (() => { const d = new Date(Date.now() - 864e5); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} 10:00`; })();
+  const addPend = async (text, waiting, follow) => evalJs(win, `
+    const card = ${cardFinder("'待定池'")};
+    const btn = card.querySelector('.addbtn'); if (btn) btn.click();
+    return new Promise(res => setTimeout(() => {
+      const inps = card.querySelectorAll('.addrow input');
+      if (!inps.length) return res(0);
+      const set = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
+      set(inps[0], ${JSON.stringify(text)}); set(inps[1], ${JSON.stringify(waiting)}); set(inps[2], ${JSON.stringify(follow)});
+      setTimeout(() => { inps[0].dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true })); res(1); }, 150);
+    }, 250));
+  `);
+  await addPend('冒烟：待定转正', '客户确认排期', '明天 10:00');
+  await sleep(600);
+  await addPend('冒烟：待跟进过期', '等运维答复', ystr);
+  await sleep(600);
+  await addPend('冒烟：作废留档', '', '');
+  await sleep(600);
+  const pendUi = await evalJs(win, `
+    const card = ${cardFinder("'待定池'")};
+    const rows = [...card.querySelectorAll('.prow')];
+    const ok = rows.filter(r => r.textContent.includes('冒烟：')).length;
+    const wait = rows.some(r => r.textContent.includes('客户确认排期'));
+    const disc = rows.find(r => r.textContent.includes('冒烟：作废留档'));
+    if (disc) disc.querySelector('.ops [title="作废（留档）"]').click();
+    return new Promise(res => setTimeout(() => {
+      const d2 = [...card.querySelectorAll('.prow')].find(r => r.textContent.includes('冒烟：作废留档'));
+      res({ ok, wait, discarded: !!d2 && d2.className.includes('discarded') });
+    }, 300));
+  `);
+  ok('待定池三条添加并显示在等内容', pendUi.ok === 3 && pendUi.wait, JSON.stringify(pendUi));
+  ok('待定作废置灰留档', !!pendUi.discarded, JSON.stringify(pendUi));
+  const promoteOk = await evalJs(win, `
+    const card = ${cardFinder("'待定池'")};
+    const row = [...card.querySelectorAll('.prow')].find(r => r.textContent.includes('冒烟：待定转正'));
+    if (!row) return { found: false };
+    row.querySelector('.ops [title="转正为待办"]').click();
+    return new Promise(res => setTimeout(() => {
+      const form = card.querySelector('.editform');
+      if (!form) return res({ found: true, form: false });
+      const inp = form.querySelector('input.fte');
+      inp.value = '2026-11-20 18:00'; inp.dispatchEvent(new Event('input', { bubbles: true }));
+      setTimeout(() => {
+        form.querySelector('.mini.ok').click();
+        setTimeout(() => {
+          const pendGone = ![...card.querySelectorAll('.prow')].some(r => r.textContent.includes('冒烟：待定转正'));
+          const todoCard = ${cardFinder("'待办事项'")};
+          const todoHas = [...todoCard.querySelectorAll('.trow')].some(r => r.textContent.includes('冒烟：待定转正'));
+          const logHas = [...document.querySelectorAll('.lg-item, .log, body')].length && document.body.textContent.includes('待定转正：「冒烟：待定转正」');
+          res({ found: true, form: true, pendGone, todoHas, logHas });
+        }, 500);
+      }, 120);
+    }, 250));
+  `);
+  ok('待定转正为正式待办并留系统痕迹', !!(promoteOk.pendGone && promoteOk.todoHas && promoteOk.logHas), JSON.stringify(promoteOk));
+  const boardPend = await evalJs(win, `
+    [...document.querySelectorAll('.segctl button')].find(x => x.textContent.includes('待办')).click();
+    return new Promise(res => setTimeout(() => {
+      const sec = document.querySelector('.pend-card');
+      res(!!sec && sec.textContent.includes('冒烟：待跟进过期') && sec.textContent.includes('待确认'));
+    }, 350));
+  `);
+  ok('跟进过期的待定事项出现在总览「待确认」分区', !!boardPend);
+  await evalJs(win, `[...document.querySelectorAll('.segctl button')].find(x => x.textContent.includes('项目')).click()`);
+  await sleep(350);
+
   // 落盘校验（待办20：项目数据为 projects/*.md，用主进程同款解析回读）
   await sleep(800);
   const Storage = require('../src/storage.js');
@@ -187,6 +272,12 @@ async function evalJs(win, code) {
     ok('磁盘内容含待办且 done=true', proj.state.todos.some(t => t.title.includes('冒烟：一条待办') && t.done));
     ok('磁盘待办到期时间为 ISO', proj.state.todos.some(t => /^\d{4}-\d{2}-\d{2}T/.test(t.due)));
     ok('决策列表结构为对象', Array.isArray(proj.state.decisions));
+    /* 待办44：待定池落盘——过期项在列且 ISO、转正项已移出、作废项留档、系统痕迹入 logs */
+    const pendOpen = (proj.state.pending || []).filter(x => x.state === 'open');
+    ok('磁盘待定池含跟进过期项（ISO）', pendOpen.some(x => x.text === '冒烟：待跟进过期' && /^\d{4}-\d{2}-\d{2}T/.test(x.followUp)), JSON.stringify(proj.state.pending || null));
+    ok('磁盘转正项已移出待定池', !pendOpen.some(x => x.text === '冒烟：待定转正') && proj.state.todos.some(t => t.title === '冒烟：待定转正' && /^\d{4}/.test(t.due)));
+    ok('磁盘作废项置灰留档不删', (proj.state.pending || []).some(x => x.text === '冒烟：作废留档' && x.state === 'discarded'));
+    ok('磁盘历史含待定转正系统记录', proj.logs.some(l => l.system && String(l.message || '').includes('待定转正')));
   }
 
   // 撤销按钮：无 AI 日志应禁用
