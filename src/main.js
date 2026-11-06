@@ -203,7 +203,7 @@ function createPet() {
   petWin.loadFile(path.join(__dirname, 'pet.html'));
   petWin.once('ready-to-show', () => {
     petWin.show();
-    petWin.webContents.once('did-finish-load', () => { restorePetSnap(); petWin.webContents.send('pet:state', petState.current); });
+    petWin.webContents.once('did-finish-load', () => { restorePetSnap(); petWin.webContents.send('pet:state', petState.current); petWin.webContents.send('pet:settings', readData().settings); });
   });
 }
 function hidePet() { if (petWin && !petWin.isDestroyed()) petWin.hide(); }
@@ -340,6 +340,7 @@ ipcMain.handle('settings:save', async (_e, { settings, apiKey }) => {
   try { app.setLoginItemSettings({ openAtLogin: !!settings.autostart }); } catch {}
   if (settings.petEnabled === true) createPet();
   else if (settings.petEnabled === false) hidePet();
+  if (petWin && !petWin.isDestroyed()) petWin.webContents.send('pet:settings', readData().settings);
   let shortcutResult;
   if (settings.shortcut !== undefined) {
     try { shortcutResult = globalShortcut.isRegistered(settings.shortcut) ? true : registerShortcut(); } catch { shortcutResult = registerShortcut(); }
@@ -557,7 +558,17 @@ ipcMain.on('pet:dblclick', () => { showWin(); win.webContents.send('ui:quick-log
 ipcMain.on('pet:hide-me', () => { hidePet(); patchSettings({ petEnabled: false }); });
 ipcMain.on('pet:menu', () => {
   if (!petWin || petWin.isDestroyed()) return;
+  const action = name => { if (petWin && !petWin.isDestroyed()) petWin.webContents.send('pet:action', name); };
   Menu.buildFromTemplate([
+    { label: '和 KIKO 玩', submenu: [
+      { label: '蹦蹦跳跳', click: () => action('jump') },
+      { label: '打滚', click: () => action('roll') },
+      { label: '拍肚皮', click: () => action('belly') },
+      { label: '挥手打招呼', click: () => action('wave') },
+      { label: '伸懒腰', click: () => action('stretch') },
+      { label: '睡一会儿', click: () => { action('sleep'); petWin.webContents.send('pet:state', 'sleeping'); } },
+    ] },
+    { type: 'separator' },
     { label: '打开 KIKO', click: showWin },
     { label: '快速记录进展', click: () => { showWin(); win.webContents.send('ui:quick-log'); } },
     { type: 'separator' },
