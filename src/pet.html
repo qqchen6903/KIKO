@@ -42,6 +42,7 @@
   .kiko.state-working { animation: think .55s ease-in-out infinite; }
   .kiko.state-done { animation: jump .95s var(--ease) both; }
   .kiko.state-thinking { animation: think 1.6s ease-in-out infinite; }
+  .kiko.state-sad { animation: think 2.2s ease-in-out infinite; filter: saturate(.72); }
   .kiko.state-sleeping { animation: sleep 3s ease-in-out infinite; }
   .kiko.dragging { animation: none !important; transform: scale(1.06) rotate(-5deg); }
   .edge-left .kiko, .edge-right .kiko, .edge-top .kiko, .edge-bottom .kiko { animation: none !important; }
@@ -55,7 +56,7 @@
     <div class="tip">拖动移动 · 单击打开 · 双击速记 · 长按互动</div>
   </div>
 <script>
-  const STATES = new Set(['idle','working','done','thinking','sleeping','bubble']);
+  const STATES = new Set(['idle','working','done','thinking','sleeping','bubble','sad']);
   const ACTIONS = new Set(['jump','roll','belly','wave','stretch','think','sleep','surprise']);
   const img = document.getElementById('kiko');
   const speech = document.getElementById('speech');
@@ -65,7 +66,7 @@
   let down = null, moved = false, longPressed = false, longPressTimer = null, lastClickAt = 0;
 
   function applyImage(s) {
-    const file = s === 'bubble' ? 'bubble' : s;
+    const file = s === 'bubble' ? 'bubble' : (s === 'sad' ? 'thinking' : s);
     img.src = 'dist/kiko/' + file + '.png';
     img.classList.toggle('wide', s === 'sleeping' || s === 'bubble');
     img.classList.toggle('full', false);
@@ -81,7 +82,7 @@
     applyImage(s);
     clearAction();
     clearTimeout(autoTimer);
-    if (s === 'done' || s === 'thinking' || s === 'bubble') autoTimer = setTimeout(() => setState('idle'), s === 'bubble' ? 8000 : 5200);
+    if (s === 'done' || s === 'thinking' || s === 'sad' || s === 'bubble') autoTimer = setTimeout(() => setState('idle'), s === 'bubble' ? 8000 : 5200);
     resetSleepTimer();
   }
   function resetSleepTimer() {
