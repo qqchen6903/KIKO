@@ -11,4 +11,6 @@ contextBridge.exposeInMainWorld('pet', {
   onState: cb => ipcRenderer.on('pet:state', (_e, s) => cb(s)),
   onSay: cb => ipcRenderer.on('pet:say', (_e, t) => cb(t)),
   onEdge: cb => ipcRenderer.on('pet:edge', (_e, edge) => cb(edge)),
+  onAction: cb => ipcRenderer.on('pet:action', (_e, action) => cb(action)),
+  onSettings: cb => ipcRenderer.on('pet:settings', (_e, settings) => cb(settings)),
 });

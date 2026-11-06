@@ -1,0 +1,20 @@
+name: Validate KIKO
+
+on:
+  pull_request:
+    branches: [develop]
+  push:
+    branches: [develop, "feature/kiko-pet-v2"]
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build:renderer

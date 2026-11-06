@@ -10,7 +10,7 @@ const PRESETS = [
   { name: '百炼 Token Plan', baseUrl: 'https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic', model: 'claude-sonnet-5-5', providerType: 'anthropic' },
 ];
 
-const f = reactive({ baseUrl: '', model: '', apiKey: '', providerType: 'openai', shortcut: '', autostart: false, remindersOn: true, petEnabled: true });
+const f = reactive({ baseUrl: '', model: '', apiKey: '', providerType: 'openai', shortcut: '', autostart: false, remindersOn: true, petEnabled: true, petScale: 1, petRandom: true, petBubbles: true });
 const testBusy = ref(false);
 const testResult = ref(null);
 const dirInfo = reactive({ root: '', custom: false, busy: false });
@@ -45,6 +45,9 @@ watch(() => ui.modal, (v) => {
     f.autostart = !!store.meta.autostart;
     f.remindersOn = s.remindersOn !== false;
     f.petEnabled = s.petEnabled !== false;
+    f.petScale = Math.max(0.75, Math.min(1.45, Number(s.petScale) || 1));
+    f.petRandom = s.petRandom !== false;
+    f.petBubbles = s.petBubbles !== false;
     testResult.value = null;
     refreshDir();
   }
@@ -79,6 +82,9 @@ async function save() {
       autostart: f.autostart,
       remindersOn: f.remindersOn,
       petEnabled: f.petEnabled,
+      petScale: f.petScale,
+      petRandom: f.petRandom,
+      petBubbles: f.petBubbles,
     },
     apiKey: f.apiKey,
   });
@@ -118,6 +124,14 @@ async function save() {
     <label class="check"><input type="checkbox" v-model="f.autostart" />开机自动启动</label>
     <label class="check"><input type="checkbox" v-model="f.remindersOn" />待办到期通知</label>
     <label class="check"><input type="checkbox" v-model="f.petEnabled" />桌面显示 KIKO 桌宠</label>
+    <div class="pet-settings" v-if="f.petEnabled">
+      <label class="field pet-scale">桌宠大小 <strong>{{ Math.round(f.petScale * 100) }}%</strong>
+        <input v-model.number="f.petScale" type="range" min="0.75" max="1.45" step="0.05" />
+      </label>
+      <label class="check"><input type="checkbox" v-model="f.petRandom" />空闲时偶尔做出卖萌动作</label>
+      <label class="check"><input type="checkbox" v-model="f.petBubbles" />显示桌宠对话气泡</label>
+      <p class="petnote">长按 KIKO 可以抚摸；右键可以选择打滚、拍肚皮、蹦跳和伸懒腰。</p>
+    </div>
 
     <div class="sep"></div>
 
@@ -155,6 +169,12 @@ async function save() {
 .tag2 { font-size: 10px; color: var(--accent); background: rgba(0, 113, 227, .1); border-radius: 980px; padding: 2px 8px; flex-shrink: 0; }
 .dirbtns { display: flex; gap: 8px; flex-wrap: wrap; }
 .check .muted { font-size: 11px; }
+.pet-settings { margin: 8px 0 0 22px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.35); border: 1px solid rgba(255,255,255,.5); }
+.pet-scale { display: flex; align-items: center; gap: 12px; }
+.pet-scale strong { margin-left: auto; color: var(--accent); font-size: 12px; }
+.pet-scale input[type=range] { width: 100%; accent-color: var(--accent); }
+.pet-settings .check { margin-top: 7px; }
+.petnote { font-size: 11px; color: var(--text-3); line-height: 1.6; margin: 8px 0 0; }
 .petnote { font-size: 11.5px; color: var(--text-3); margin: 4px 0 0; line-height: 1.7; }
 .adv { display: flex; flex-direction: column; gap: 6px; }
 .adv .muted { line-height: 1.7; font-size: 11.5px; }

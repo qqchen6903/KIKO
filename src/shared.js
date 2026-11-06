@@ -163,7 +163,7 @@ function diffState(oldState, newState) {
   };
 }
 
-const DEFAULTS = { projects: [], activeProjectId: null, settings: { baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' }, version: 2 };
+const DEFAULTS = { projects: [], activeProjectId: null, settings: { baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat', petScale: 1, petRandom: true, petBubbles: true }, version: 2 };
 
 /* 迁移并规整整份 workspace 数据（就地尽量复用原对象），任何缺失字段补默认值 */
 function migrate(db) {
